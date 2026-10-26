@@ -9,6 +9,7 @@ rust-version = "1.85"
 
 [workspace.dependencies]
 pbc = { path = "crates/pbc" }
+thiserror = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
