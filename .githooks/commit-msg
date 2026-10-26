@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Palestre commit rules, checked on every commit (enable once per clone: git config core.hooksPath .githooks).
+#   1. the message is one English title line: no description, no trailers;
+#   2. the title reads `type(scope): summary`, ASCII only, 72 characters at most;
+#   3. no AI attribution;
+#   4. author and committer are one of the two team members.
+set -euo pipefail
+
+allowed=(
+  "farid gouirah <gouirah.farid.1998@gmail.com>"
+  "chaimae faris <chaimaafaris364@gmail.com>"
+)
+types='feat|fix|test|docs|refactor|perf|build|ci|chore|style|revert'
+
+fail() {
+  printf 'commit-msg: %s\n' "$1" >&2
+  printf 'commit-msg: message was:\n%s\n' "$message" >&2
+  exit 1
+}
+
+# What git will store: drop everything below the `git commit -v` scissors, then comment lines.
+message=$(sed -e '/^# -\{24\} >8 -\{24\}$/,$d' "$1" | grep -v '^#' || true)
+title=$(printf '%s\n' "$message" | grep -m1 '[^[:space:]]' || true)
+lines=$(printf '%s\n' "$message" | grep -c '[^[:space:]]' || true)
+
+[ -n "$title" ] || fail "empty message"
+
+if printf '%s\n' "$message" | grep -qiE 'co-authored-by:|noreply@anthropic\.com|generated (with|by) .*claude'; then
+  fail "no AI attribution in commits"
+fi
+
+ident() { git var "$1" | sed -E 's/ [0-9]+ [-+][0-9]{4}$//' | tr '[:upper:]' '[:lower:]'; }
+for who in GIT_AUTHOR_IDENT GIT_COMMITTER_IDENT; do
+  id=$(ident "$who")
+  match=no
+  for ok in "${allowed[@]}"; do [ "$id" = "$ok" ] && match=yes; done
+  [ "$match" = yes ] || fail "${who%_IDENT} '$id' is not a team member (Farid GOUIRAH or Chaimae Faris)"
+done
+
+# Merge and revert commits keep the message git writes for them.
+case "$title" in
+  "Merge "* | "Revert \""*) exit 0 ;;
+esac
+
+[ "$lines" -eq 1 ] || fail "title only: no description, no trailers (descriptions go in the pull request)"
+if printf '%s' "$title" | LC_ALL=C grep -q '[^ -~]'; then
+  fail "title must be plain English ASCII (no accents, no emoji)"
+fi
+[ "${#title}" -le 72 ] || fail "title is ${#title} characters, 72 at most"
+printf '%s' "$title" | grep -qE "^($types)(\([a-z0-9._/-]+\))?!?: [a-z0-9]" \
+  || fail "title must read 'type(scope): summary' in lower case, type in: ${types//|/, }"
+printf '%s' "$title" | grep -qE '\.$' && fail "no final period in the title"
+exit 0
