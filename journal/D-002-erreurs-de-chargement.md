@@ -4,7 +4,7 @@
 - **Date :** 2026-10-26
 - **Auteurs :** Farid GOUIRAH
 - **Statut :** proposée
-- **Commits concernés :** —
+- **Commits concernés :** `890c92f` (proposition), `d94a247` (chargeur)
 
 ## 1. Contexte
 
@@ -28,6 +28,11 @@ une conversion explicite vers la chaîne normative.
 L'option B. `LoadError` détaille la cause et `fault_name()` rend toujours `"BadHeader"`. Effet de bord utile :
 `Fault::from_name("BadHeader")` rendra `None`, ce qui fera refuser naturellement un `SENSED` qui nomme une faute de
 chargement (annexe K.3).
+
+L'assistant a aussi écrit le code du chargeur (`crates/pbc/src/program.rs`, commit `d94a247`) pour faire passer les
+dix tests de `crates/pbc/tests/load.rs`, eux aussi tirés de son plan. Il lit le fichier avec un curseur (`Reader`)
+qui ne passe que par `get`, si bien qu'aucune lecture ne peut sortir du tampon, et il vérifie chaque borne de A.1
+avant de lire ou d'allouer ce qu'elle protège.
 
 Ce que nous en avons vérifié : *à compléter par l'équipe.*
 
