@@ -4,7 +4,7 @@
 - **Date :** 2026-10-26
 - **Auteurs :** Farid GOUIRAH
 - **Statut :** proposée
-- **Commits concernés :** —
+- **Commits concernés :** `d8b3040` (proposition), `cbd4552` (table et décodeur)
 
 ## 1. Contexte
 
@@ -34,6 +34,11 @@ Le décodage à la volée et une table unique dans `op.rs` : `Op::from_byte` est
 fonction privée porte mnémonique, type d'opérande et gaz dans un seul `match`. Le gaz n'existe qu'à cet endroit, ce
 qui localise une future règle de gaz v2. Un test vérifie que les 43 octets font l'aller-retour. `Instr` porte des
 opérandes typés (`PushI16(i16)`, `Load(u8)`…), si bien qu'un opérande du mauvais type est irreprésentable.
+
+L'assistant a aussi écrit le code (`crates/pbc/src/fault.rs`, `op.rs` et `instr.rs`, commit `cbd4552`) pour faire
+passer les onze tests de `crates/pbc/tests/fault.rs` et `decode.rs`, eux aussi tirés de son plan. `decode` applique
+les étapes 1 à 3 de B.2 dans l'ordre, et ne lit les octets qu'à travers `get` : aucun décalage, même `usize::MAX`, ne
+peut le faire paniquer.
 
 Ce que nous en avons vérifié : *à compléter par l'équipe.*
 
