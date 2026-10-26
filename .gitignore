@@ -1,2 +1,7 @@
 .claude/
 plan/
+/target
+/fuzz/target
+/fuzz/corpus
+/fuzz/artifacts
+.idea/
