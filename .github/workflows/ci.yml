@@ -1,0 +1,24 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      PROPTEST_CASES: "512"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - name: aucun async, aucun runtime asynchrone
+        run: |
+          if grep -rnE '\basync (fn|move|\{)|\.await\b' --include='*.rs' crates/; then
+            echo "async interdit (README §3)"; exit 1
+          fi
+          if grep -rnE '^(tokio|futures|async-std)' --include='Cargo.toml' crates/ Cargo.toml; then
+            echo "runtime asynchrone interdit (README §3)"; exit 1
+          fi
