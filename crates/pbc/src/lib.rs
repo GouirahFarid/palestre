@@ -6,3 +6,7 @@
 ///
 /// C'est l'unique occurrence de ce numéro dans le code : la version 2.0.0 sera révélée en soutenance (annexe H.2).
 pub const SPEC_VERSION: &str = "1.9.0";
+
+mod program;
+
+pub use program::{LoadError, MAX_CODE_LEN, MAX_CONSTANTS, Program};
