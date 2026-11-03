@@ -2,10 +2,12 @@
 #![forbid(unsafe_code)]
 #![deny(clippy::indexing_slicing, clippy::arithmetic_side_effects)]
 
+mod env;
 mod machine;
 mod report;
 
-pub use machine::{Machine, Step};
+pub use env::{Env, run_with};
+pub use machine::{ActCall, Machine, RandCall, SenseCall, Step};
 pub use report::{ActKind, ActRecord, Action, Report};
 
 /// Pile de données : 64 emplacements (B.1).
