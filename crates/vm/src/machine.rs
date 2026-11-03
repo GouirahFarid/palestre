@@ -1,11 +1,11 @@
 //! La boucle d'un tour (B.2) et l'exécution des instructions : pile, arithmétique (§0, B.6), mémoire, sauts (B.4)
-//! et appels.
+//! appels, et les rappels `SENSE`, `ACT`, `RAND`, qui suspendent la machine (D-004).
 
 use std::num::NonZeroU16;
 
 use pbc::{Fault, Instr, Op, Program, decode};
 
-use crate::{ActRecord, CALL_DEPTH, Memory, Report, STACK_SIZE};
+use crate::{ActKind, ActRecord, Action, CALL_DEPTH, Memory, Report, STACK_SIZE};
 
 /// L'état d'un agent pendant un tour. La pile est un tableau de taille fixe et la trace est préallouée dans `new` :
 /// rien n'est alloué pendant l'exécution (README §3).
@@ -26,17 +26,75 @@ pub struct Machine<'p> {
     act: Option<ActRecord>,
 }
 
-/// Où en est l'exécution quand `run` rend la main. Les rappels `SENSE`, `ACT` et `RAND` s'y ajoutent en T07 (D-004).
-pub enum Step {
+/// Où en est l'exécution quand `run` rend la main : le tour est fini, ou la machine attend la réponse d'un rappel.
+/// La machine voyage dans le jeton, par valeur : rien n'est alloué, et la réponse se donne par `answer` (D-004).
+#[allow(clippy::large_enum_variant)] // D-004 : la machine est déplacée, jamais allouée
+pub enum Step<'p> {
     Done(Report),
+    Sense(SenseCall<'p>),
+    Act(ActCall<'p>),
+    Rand(RandCall<'p>),
 }
 
-impl Step {
-    /// `Some(report)` si l'exécution est terminée.
+impl Step<'_> {
+    /// `Some(report)` si l'exécution est terminée, `None` si un rappel attend sa réponse.
     pub fn done(self) -> Option<Report> {
         match self {
             Step::Done(report) => Some(report),
+            _ => None,
         }
+    }
+}
+
+/// Un `SENSE k` en attente de la valeur du capteur.
+pub struct SenseCall<'p> {
+    machine: Machine<'p>,
+    k: u8,
+}
+
+impl<'p> SenseCall<'p> {
+    pub fn k(&self) -> u8 {
+        self.k
+    }
+
+    /// `Ok(v)` empile `v` et reprend l'exécution ; `Err(f)` termine le tour sur la faute `f` (K.3 : `SENSED` porte une
+    /// valeur ou une faute). Dans les deux cas, le gaz de `SENSE` est déjà payé.
+    pub fn answer(self, answer: Result<i64, Fault>) -> Step<'p> {
+        self.machine.resume(answer)
+    }
+}
+
+/// Un `ACT k` en attente de l'issue de l'action.
+pub struct ActCall<'p> {
+    machine: Machine<'p>,
+    action: Action,
+}
+
+impl<'p> ActCall<'p> {
+    pub fn action(&self) -> Action {
+        self.action
+    }
+
+    /// Consigne l'action tentée et son issue, empile 1 ou 0, puis reprend. L'action reste consignée même si le tour
+    /// faute ensuite (E.2).
+    pub fn answer(self, ok: bool) -> Step<'p> {
+        let mut machine = self.machine;
+        machine.act = Some(ActRecord {
+            action: self.action,
+            ok,
+        });
+        machine.resume(Ok(i64::from(ok)))
+    }
+}
+
+/// Un `RAND` en attente de la valeur tirée par l'hôte.
+pub struct RandCall<'p> {
+    machine: Machine<'p>,
+}
+
+impl<'p> RandCall<'p> {
+    pub fn answer(self, value: i64) -> Step<'p> {
+        self.machine.resume(Ok(value))
     }
 }
 
@@ -46,6 +104,10 @@ enum Flow {
     /// Continuer à cette adresse : un saut ou un appel dont la cible est vérifiée, ou un retour.
     Jump(usize),
     Halt,
+    /// Rendre la main : un rappel attend sa réponse.
+    Sense(u8),
+    Act(Action),
+    Rand,
 }
 
 impl<'p> Machine<'p> {
@@ -68,7 +130,7 @@ impl<'p> Machine<'p> {
     }
 
     /// Exécute jusqu'à `HALT` ou une faute, en appliquant B.2 à chaque pas.
-    pub fn run(mut self) -> Step {
+    pub fn run(mut self) -> Step<'p> {
         loop {
             // Étapes 1 à 3 : décoder. Une faute de décodage ne coûte rien.
             let instr = match decode(self.program.code(), self.pc) {
@@ -81,11 +143,31 @@ impl<'p> Machine<'p> {
             };
             self.gas_left = left;
             // Étapes 5 et 6 : exécuter (une faute ici a déjà payé son gaz), puis avancer.
-            match self.exec(instr) {
-                Ok(Flow::Next) => self.pc = self.pc.saturating_add(instr.size()),
-                Ok(Flow::Jump(target)) => self.pc = target,
-                Ok(Flow::Halt) => return self.finish(None),
+            let flow = match self.exec(instr) {
+                Ok(flow) => flow,
                 Err(fault) => return self.finish(Some(fault)),
+            };
+            let next = self.pc.saturating_add(instr.size());
+            match flow {
+                Flow::Next => self.pc = next,
+                Flow::Jump(target) => self.pc = target,
+                Flow::Halt => return self.finish(None),
+                // Un rappel : `pc` passe déjà à l'instruction suivante, et la machine part dans le jeton.
+                Flow::Sense(k) => {
+                    self.pc = next;
+                    return Step::Sense(SenseCall { machine: self, k });
+                }
+                Flow::Act(action) => {
+                    self.pc = next;
+                    return Step::Act(ActCall {
+                        machine: self,
+                        action,
+                    });
+                }
+                Flow::Rand => {
+                    self.pc = next;
+                    return Step::Rand(RandCall { machine: self });
+                }
             }
         }
     }
@@ -216,8 +298,18 @@ impl<'p> Machine<'p> {
             }
             // L'adresse de retour suit un CALL : aucun marqueur n'y est exigé (B.4).
             Instr::Return => return self.leave().map(Flow::Jump),
-            // Provisoire : SENSE, ACT et RAND arrivent en T07.
-            _ => return Err(Fault::BadOpcode),
+            // Rappels : la réponse est empilée par `answer`, qui peut alors lever `StackOverflow` (D-005).
+            Instr::Sense(k) => return Ok(Flow::Sense(k)),
+            Instr::Rand => return Ok(Flow::Rand),
+            Instr::Act(k) => {
+                // D-005 : l'arité, puis une action connue, puis une seule action par tour, et enfin le rappel.
+                let arg = self.pop()?;
+                let kind = ActKind::from_code(k).ok_or(Fault::BadAction)?;
+                if self.act.is_some() {
+                    return Err(Fault::AlreadyActed);
+                }
+                return Ok(Flow::Act(Action { kind, arg }));
+            }
         }
         Ok(Flow::Next)
     }
@@ -312,7 +404,15 @@ impl<'p> Machine<'p> {
         Ok(())
     }
 
-    fn finish(self, fault: Option<Fault>) -> Step {
+    /// Empile la réponse d'un rappel et reprend l'exécution, ou termine le tour sur la faute.
+    fn resume(mut self, answer: Result<i64, Fault>) -> Step<'p> {
+        match answer.and_then(|value| self.push(value)) {
+            Ok(()) => self.run(),
+            Err(fault) => self.finish(Some(fault)),
+        }
+    }
+
+    fn finish(self, fault: Option<Fault>) -> Step<'p> {
         Step::Done(Report {
             mem: self.mem,
             gas_used: self.budget.saturating_sub(self.gas_left),

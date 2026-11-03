@@ -53,3 +53,9 @@ réviser cette entrée et inverser le test de T07.
 ## Historique
 
 - 2026-10-27 — proposée.
+- 2026-11-03 — précisée par Farid GOUIRAH en écrivant les rappels (T07), sans changer la décision. `ACT k` vérifie,
+  dans cet ordre : l'arité en dépilant `arg` (`StackUnderflow`), puis `k` dans `0..=3` (`BadAction`, sans rappel et
+  sans action consignée, E.4), puis qu'aucune action n'a été tentée dans le tour (`AlreadyActed`, sans rappel, cas
+  032). Seulement ensuite le rappel est posé, et l'issue empilée ne peut pas déborder puisque `arg` vient d'être
+  dépilé (E.4). `SENSE` et `RAND` posent le rappel sans regarder la place sur la pile ; c'est l'empilement de la
+  réponse qui lève `StackOverflow` (test `callbacks_on_a_full_stack_ask_then_overflow`).
