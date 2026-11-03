@@ -1,4 +1,4 @@
-//! La boucle d'un tour (B.2) et les instructions de pile.
+//! La boucle d'un tour (B.2), les instructions de pile et l'arithmétique (§0, B.6).
 
 use std::num::NonZeroU16;
 
@@ -137,10 +137,44 @@ impl<'p> Machine<'p> {
             }
             // B.7 : le gaz restant, une fois le coût de GAS lui-même prélevé.
             Instr::Gas => self.push(i64::from(self.gas_left))?,
-            // Provisoire : les autres familles d'instructions arrivent en T05, T06 et T07.
+            // Toute l'arithmétique enveloppe (§0) ; la division tronque vers zéro, comme en Rust (B.3).
+            Instr::Add => self.binary(|a, b| Ok(a.wrapping_add(b)))?,
+            Instr::Sub => self.binary(|a, b| Ok(a.wrapping_sub(b)))?,
+            Instr::Mul => self.binary(|a, b| Ok(a.wrapping_mul(b)))?,
+            Instr::Div => self.binary(div)?,
+            Instr::Mod => self.binary(rem)?,
+            Instr::Neg => self.unary(i64::wrapping_neg)?,
+            Instr::Eq => self.binary(|a, b| Ok(i64::from(a == b)))?,
+            Instr::Lt => self.binary(|a, b| Ok(i64::from(a < b)))?,
+            Instr::Gt => self.binary(|a, b| Ok(i64::from(a > b)))?,
+            // NOT est logique (0 ou 1), BNOT est le complément à un (B.6).
+            Instr::Not => self.unary(|a| i64::from(a == 0))?,
+            Instr::BNot => self.unary(|a| !a)?,
+            Instr::And => self.binary(|a, b| Ok(a & b))?,
+            Instr::Or => self.binary(|a, b| Ok(a | b))?,
+            Instr::Xor => self.binary(|a, b| Ok(a ^ b))?,
+            Instr::Shl => self.binary(|a, n| Ok(shl(a, n)))?,
+            Instr::Shr => self.binary(|a, n| Ok(shr(a, n)))?,
+            Instr::Sar => self.binary(|a, n| Ok(sar(a, n)))?,
+            // Provisoire : les autres familles d'instructions arrivent en T06 et T07.
             _ => return Err(Fault::BadOpcode),
         }
         Ok(Flow::Next)
+    }
+
+    /// `a b -- f(a, b)` : `b` est au sommet. Les deux valeurs sont vérifiées avant d'en dépiler aucune, et
+    /// l'empilement ne peut pas déborder puisqu'on vient d'en retirer deux (D-005).
+    fn binary(&mut self, f: impl Fn(i64, i64) -> Result<i64, Fault>) -> Result<(), Fault> {
+        self.need(2)?;
+        let b = self.pop()?;
+        let a = self.pop()?;
+        self.push(f(a, b)?)
+    }
+
+    /// `a -- f(a)`.
+    fn unary(&mut self, f: impl Fn(i64) -> i64) -> Result<(), Fault> {
+        let a = self.pop()?;
+        self.push(f(a))
     }
 
     fn constant(&self, index: usize) -> Result<i64, Fault> {
@@ -183,4 +217,50 @@ impl<'p> Machine<'p> {
             trace: self.trace,
         })
     }
+}
+
+/// `DIV` : le quotient tronqué vers zéro. Une fois `b == 0` écarté, `checked_div` n'échoue que pour
+/// `i64::MIN / -1`, qui enveloppe en `i64::MIN` (§0). La faute arrive après le prélèvement du gaz : elle est payée.
+fn div(a: i64, b: i64) -> Result<i64, Fault> {
+    if b == 0 {
+        return Err(Fault::DivByZero);
+    }
+    Ok(a.checked_div(b).unwrap_or(i64::MIN))
+}
+
+/// `MOD` : le reste, du signe de `a`. Le seul échec restant de `checked_rem`, `i64::MIN % -1`, vaut 0.
+fn rem(a: i64, b: i64) -> Result<i64, Fault> {
+    if b == 0 {
+        return Err(Fault::DivByZero);
+    }
+    Ok(a.checked_rem(b).unwrap_or(0))
+}
+
+/// Le compte d'un décalage s'il est dans `0..=63` (B.6). Il faut tester la plage avant de décaler :
+/// `wrapping_shl` réduirait le compte modulo 64, et `1 SHL 64` vaudrait 1 au lieu de 0.
+fn shift_count(n: i64) -> Option<u32> {
+    u32::try_from(n).ok().filter(|&n| n < 64)
+}
+
+/// `SHL` logique : le motif de bits est décalé comme un `u64` (B.6), et vaut 0 hors de `0..=63`.
+fn shl(a: i64, n: i64) -> i64 {
+    shift_count(n)
+        .and_then(|n| (a as u64).checked_shl(n))
+        .map_or(0, |v| v as i64)
+}
+
+/// `SHR` logique : il ne propage pas le signe, et vaut 0 hors de `0..=63`.
+fn shr(a: i64, n: i64) -> i64 {
+    shift_count(n)
+        .and_then(|n| (a as u64).checked_shr(n))
+        .map_or(0, |v| v as i64)
+}
+
+/// `SAR` arithmétique : il propage le signe et arrondit vers moins l'infini. Hors de `0..=63`, il rend le
+/// remplissage de signe : 0 si `a >= 0`, -1 sinon (B.6).
+fn sar(a: i64, n: i64) -> i64 {
+    let fill = if a < 0 { -1 } else { 0 };
+    shift_count(n)
+        .and_then(|n| a.checked_shr(n))
+        .unwrap_or(fill)
 }
