@@ -1,10 +1,11 @@
-//! La boucle d'un tour (B.2), les instructions de pile et l'arithmétique (§0, B.6).
+//! La boucle d'un tour (B.2) et l'exécution des instructions : pile, arithmétique (§0, B.6), mémoire, sauts (B.4)
+//! et appels.
 
 use std::num::NonZeroU16;
 
-use pbc::{Fault, Instr, Program, decode};
+use pbc::{Fault, Instr, Op, Program, decode};
 
-use crate::{ActRecord, Memory, Report, STACK_SIZE};
+use crate::{ActRecord, CALL_DEPTH, Memory, Report, STACK_SIZE};
 
 /// L'état d'un agent pendant un tour. La pile est un tableau de taille fixe et la trace est préallouée dans `new` :
 /// rien n'est alloué pendant l'exécution (README §3).
@@ -13,6 +14,10 @@ pub struct Machine<'p> {
     stack: [i64; STACK_SIZE],
     /// Nombre de valeurs sur la pile ; le sommet est `stack[sp - 1]`.
     sp: usize,
+    /// Les adresses de retour des appels en cours, seize au plus (B.1).
+    frames: [usize; CALL_DEPTH],
+    /// Nombre d'appels en cours ; le dernier est `frames[fp - 1]`.
+    fp: usize,
     mem: Memory,
     pc: usize,
     budget: u16,
@@ -38,6 +43,8 @@ impl Step {
 /// Ce que l'exécution d'une instruction demande à la boucle.
 enum Flow {
     Next,
+    /// Continuer à cette adresse : un saut ou un appel dont la cible est vérifiée, ou un retour.
+    Jump(usize),
     Halt,
 }
 
@@ -48,6 +55,8 @@ impl<'p> Machine<'p> {
             program,
             stack: [0; STACK_SIZE],
             sp: 0,
+            frames: [0; CALL_DEPTH],
+            fp: 0,
             mem,
             pc: 0,
             budget: budget.get(),
@@ -74,6 +83,7 @@ impl<'p> Machine<'p> {
             // Étapes 5 et 6 : exécuter (une faute ici a déjà payé son gaz), puis avancer.
             match self.exec(instr) {
                 Ok(Flow::Next) => self.pc = self.pc.saturating_add(instr.size()),
+                Ok(Flow::Jump(target)) => self.pc = target,
                 Ok(Flow::Halt) => return self.finish(None),
                 Err(fault) => return self.finish(Some(fault)),
             }
@@ -156,7 +166,57 @@ impl<'p> Machine<'p> {
             Instr::Shl => self.binary(|a, n| Ok(shl(a, n)))?,
             Instr::Shr => self.binary(|a, n| Ok(shr(a, n)))?,
             Instr::Sar => self.binary(|a, n| Ok(sar(a, n)))?,
-            // Provisoire : les autres familles d'instructions arrivent en T06 et T07.
+            // Mémoire : une adresse dépilée hors de 0..=255 est `OutOfBounds` ; un `u8` immédiat est toujours valide.
+            Instr::LoadX => {
+                let address = self.pop()?;
+                let value = *self.cell(address)?;
+                self.push(value)?;
+            }
+            Instr::StoreX => {
+                // v addr -- : l'arité d'abord, pour que la pile vide l'emporte sur l'adresse (D-005).
+                self.need(2)?;
+                let address = self.pop()?;
+                let value = self.pop()?;
+                *self.cell(address)? = value;
+            }
+            Instr::Load(k) => {
+                let value = *self.cell(i64::from(k))?;
+                self.push(value)?;
+            }
+            Instr::Store(k) => {
+                let value = self.pop()?;
+                *self.cell(i64::from(k))? = value;
+            }
+            // Sauts (B.4). Un saut conditionnel ne vérifie sa cible que s'il a lieu.
+            Instr::Jmp(d) => return self.land(self.relative(instr.size(), d)),
+            Instr::Jz(d) => {
+                if self.pop()? == 0 {
+                    return self.land(self.relative(instr.size(), d));
+                }
+            }
+            Instr::Jnz(d) => {
+                if self.pop()? != 0 {
+                    return self.land(self.relative(instr.size(), d));
+                }
+            }
+            Instr::JumpDest => {}
+            Instr::JmpX => {
+                let target = self.pop()?;
+                return self.land(usize::try_from(target).ok());
+            }
+            // Appels : le cadre est empilé avant que la cible soit vérifiée (D-005).
+            Instr::Call(d) => {
+                self.enter(instr.size())?;
+                return self.land(self.relative(instr.size(), d));
+            }
+            Instr::CallX => {
+                let target = self.pop()?;
+                self.enter(instr.size())?;
+                return self.land(usize::try_from(target).ok());
+            }
+            // L'adresse de retour suit un CALL : aucun marqueur n'y est exigé (B.4).
+            Instr::Return => return self.leave().map(Flow::Jump),
+            // Provisoire : SENSE, ACT et RAND arrivent en T07.
             _ => return Err(Fault::BadOpcode),
         }
         Ok(Flow::Next)
@@ -175,6 +235,50 @@ impl<'p> Machine<'p> {
     fn unary(&mut self, f: impl Fn(i64) -> i64) -> Result<(), Fault> {
         let a = self.pop()?;
         self.push(f(a))
+    }
+
+    /// La cellule `mem[address]`, ou `OutOfBounds` si `address` n'est pas dans `0..=255`.
+    fn cell(&mut self, address: i64) -> Result<&mut i64, Fault> {
+        usize::try_from(address)
+            .ok()
+            .and_then(|address| self.mem.get_mut(address))
+            .ok_or(Fault::OutOfBounds)
+    }
+
+    /// La cible `pc + taille + d` d'un saut relatif (B.4) : la base est l'instruction suivante, pas le saut. `None`
+    /// si elle est négative.
+    fn relative(&self, size: usize, d: i16) -> Option<usize> {
+        let next = i64::try_from(self.pc.checked_add(size)?).ok()?;
+        usize::try_from(next.checked_add(i64::from(d))?).ok()
+    }
+
+    /// Les deux conditions de B.4, pour les six sauts : la cible est dans le code, et son octet vaut `0x43`
+    /// (`JUMPDEST`), même au milieu d'un opérande (A.3). Sinon, `BadJump`.
+    fn land(&self, target: Option<usize>) -> Result<Flow, Fault> {
+        let target = target.ok_or(Fault::BadJump)?;
+        match self.program.code().get(target) {
+            Some(&byte) if byte == Op::JumpDest.byte() => Ok(Flow::Jump(target)),
+            _ => Err(Fault::BadJump),
+        }
+    }
+
+    /// Empile l'adresse de retour, celle de l'instruction qui suit l'appel.
+    fn enter(&mut self, size: usize) -> Result<(), Fault> {
+        let frame = self
+            .frames
+            .get_mut(self.fp)
+            .ok_or(Fault::CallStackOverflow)?;
+        *frame = self.pc.saturating_add(size);
+        self.fp = self.fp.saturating_add(1);
+        Ok(())
+    }
+
+    /// Dépile l'adresse de retour du dernier appel.
+    fn leave(&mut self) -> Result<usize, Fault> {
+        let top = self.fp.checked_sub(1).ok_or(Fault::CallStackUnderflow)?;
+        let address = *self.frames.get(top).ok_or(Fault::CallStackUnderflow)?;
+        self.fp = top;
+        Ok(address)
     }
 
     fn constant(&self, index: usize) -> Result<i64, Fault> {
