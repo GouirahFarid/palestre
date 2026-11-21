@@ -3,7 +3,7 @@
 - **Identifiant :** D-002
 - **Date :** 2026-10-26
 - **Auteurs :** Farid GOUIRAH
-- **Statut :** proposée
+- **Statut :** adoptée
 - **Commits concernés :** `890c92f` (proposition), `d94a247` (chargeur)
 
 ## 1. Contexte
@@ -34,11 +34,25 @@ dix tests de `crates/pbc/tests/load.rs`, eux aussi tirés de son plan. Il lit le
 qui ne passe que par `get`, si bien qu'aucune lecture ne peut sortir du tampon, et il vérifie chaque borne de A.1
 avant de lire ou d'allouer ce qu'elle protège.
 
-Ce que nous en avons vérifié : *à compléter par l'équipe.*
+Ce que nous en avons vérifié : `cargo test -p pbc` passe, dont les dix tests de `crates/pbc/tests/load.rs`. Nous avons
+relu `crates/pbc/src/program.rs` et son curseur `Reader`. Les trois cas `header` du corpus public (001, 002 et 003)
+sont refusés et le cas 040 se charge (test `public_corpus_header_cases_are_refused`). Un fichier qui annonce plus de
+4095 constantes est refusé avant que la table soit lue ou allouée (test
+`constant_count_is_bounded_before_reading_the_table`).
 
 ## 4. Ce que nous avons décidé, et pourquoi
 
-*À rédiger par l'équipe.*
+Nous retenons l'option B : deux types, `LoadError` pour le chargement et `Fault` (quinze variantes) pour l'exécution.
+
+Avec un seul type, rien n'empêcherait la VM de rendre `BadHeader` au milieu d'un tour, alors que B.5 dit que cela
+n'arrive jamais. Avec deux types, cette erreur ne peut même pas s'écrire : `Machine::new` ne reçoit qu'un `Program`
+déjà chargé, et les fautes de la machine sont des `Fault`.
+
+Le deuxième avantage nous sert au débogage : `LoadError` dit exactement ce qui ne va pas (magique, version, taille…),
+alors que sur le fil tout s'appelle `BadHeader`, grâce à `fault_name()`.
+
+Enfin, comme `Fault::from_name("BadHeader")` rend `None`, le serveur refusera sans code supplémentaire un `SENSED` qui
+nommerait une faute de chargement (K.3).
 
 ## 5. Ce qui nous ferait changer d'avis
 
@@ -48,3 +62,4 @@ dynamique de code.
 ## Historique
 
 - 2026-10-26 — proposée.
+- 2026-11-21 — adoptée.
