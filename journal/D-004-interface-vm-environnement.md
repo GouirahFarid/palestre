@@ -3,8 +3,8 @@
 - **Identifiant :** D-004
 - **Date :** 2026-10-27
 - **Auteurs :** Chaimae Faris
-- **Statut :** proposée
-- **Commits concernés :** —
+- **Statut :** adoptée
+- **Commits concernés :** `974c7aa` (proposition), `8285cf0` (cycle et `Step`), `856d8a0` (rappels et `Env`)
 
 ## 1. Contexte
 
@@ -39,11 +39,27 @@ sur `Step` : on l'autorise localement, avec un commentaire qui renvoie à cette 
 L'assistant a aussi écrit le code de la tâche T04 (`crates/vm`) et ses 18 tests. À ce stade, `Step` n'a qu'une
 variante, `Done` : les rappels arrivent avec la tâche T07.
 
-Ce que nous en avons vérifié : *à compléter.*
+Ce que nous en avons vérifié : `cargo test -p vm` passe (66 tests, dont les 13 de `crates/vm/tests/callbacks.rs`).
+Nous avons relu les jetons `SenseCall`, `ActCall` et `RandCall` et leur méthode `answer` dans
+`crates/vm/src/machine.rs`, ainsi que la boucle `run_with` dans `crates/vm/src/env.rs`. La machine pèse environ 2,7 Ko
+et elle est déplacée à chaque rappel : c'est une copie en mémoire, pas une allocation, et nous l'acceptons.
 
 ## 4. Ce que nous avons décidé, et pourquoi
 
-*À rédiger.*
+Nous retenons l'option B : la machine à reprises, avec le trait `Env` et `run_with` pour les environnements locaux.
+
+D'abord, il n'y a aucune E/S dans la boucle de la VM. Le serveur de l'annexe K (tâche T10) recevra un jeton, enverra
+la question au client, attendra sa réponse, puis relancera la machine avec `answer` : le JSON et le réseau restent en
+dehors de la VM.
+
+Ensuite, les erreurs restent chez celui qui les rencontre. Si le client se déconnecte pendant un rappel, c'est le
+serveur qui le voit et qui ferme la connexion sans `RESULT` (K.6) ; la VM n'a pas besoin d'un type d'erreur générique
+pour cela.
+
+Enfin, `answer` consomme son jeton : répondre deux fois, ou répondre à une question qui n'a pas été posée, ne compile
+pas.
+
+L'arène et le corpus ont toujours la réponse sous la main : pour eux, `run_with` fait la boucle.
 
 ## 5. Ce qui nous ferait changer d'avis
 
@@ -53,3 +69,4 @@ Une mesure montrant que la copie de la machine à chaque rappel pèse (peu proba
 ## Historique
 
 - 2026-10-27 — proposée.
+- 2026-11-21 — adoptée.
