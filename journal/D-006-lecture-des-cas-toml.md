@@ -3,8 +3,8 @@
 - **Identifiant :** D-006
 - **Date :** 2026-11-21
 - **Auteurs :** Chaimae Faris
-- **Statut :** proposée
-- **Commits concernés :** —
+- **Statut :** adoptée
+- **Commits concernés :** `116ffe3` (proposition), `b81230a` (crate `corpus`)
 
 ## 1. Contexte
 
@@ -39,11 +39,29 @@ avec un numéro de ligne.
 Le parseur est une descente récursive sur un curseur de caractères qui compte les lignes. Les tables gardent l'ordre
 du fichier (`Vec<(String, Value)>`), ce qui suffit à des cas de quelques lignes.
 
-Ce que nous en avons vérifié : *à compléter.*
+L'assistant a aussi écrit le code de la tâche T08 (`crates/corpus`) pour faire passer les 18 tests du plan, et il y a
+ajouté une règle que le plan ne donnait pas : une clé inconnue dans `case.toml`, ou un champ inconnu dans
+`expected.json`, est refusé au lieu d'être ignoré. La VM a passé les 65 cas publics au premier essai, sans correction.
+
+Ce que nous en avons vérifié : `cargo test -p corpus` passe (18 tests), dont `the_public_corpus_passes_in_process`, 65
+cas sur 65. Nous avons relu `crates/corpus/src/toml.rs`, en particulier la façon dont le curseur compte les lignes
+(`bump`). Nous avons regardé plusieurs `case.toml` du corpus : on n'y trouve que des chaînes, des entiers, des
+booléens, des tables `{ … }`, des tableaux `[ … ]` et des en-têtes `[[exec]]`. Le test `errors_carry_a_line_number`
+montre qu'un flottant, une table `[x]` ou une chaîne non terminée sont refusés avec leur numéro de ligne.
 
 ## 4. Ce que nous avons décidé, et pourquoi
 
-*À rédiger.*
+Nous retenons l'option B : notre propre lecteur, limité au sous-ensemble du corpus.
+
+La bibliothèque `toml` n'est pas dans la liste autorisée, et attendre l'accord de l'enseignant aurait bloqué T08 sans
+savoir pour combien de temps. Convertir les cas en JSON ne règle rien non plus : les cas cachés arriveront en TOML le
+jour de la soutenance, et les convertir à la main ce jour-là serait trop risqué.
+
+Le sous-ensemble est petit : `toml.rs` fait environ 280 lignes, et chaque règle a son test. C'est aussi un premier
+parseur écrit à la main, qui nous servira pour le langage du bonus B3.
+
+Nous gardons la règle ajoutée par l'assistant : une clé inconnue est refusée. Un `budjet = 12` mal écrit donne une
+erreur claire, au lieu de lancer le cas en silence avec le budget par défaut de 1000.
 
 ## 5. Ce qui nous ferait changer d'avis
 
@@ -53,3 +71,4 @@ qu'on le saura par un message clair qui donne la ligne, pas par un résultat fau
 ## Historique
 
 - 2026-11-21 — proposée.
+- 2026-11-21 — adoptée.
