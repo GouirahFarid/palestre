@@ -63,6 +63,22 @@ majorité fait autrement, nous réviserons cette entrée (section 5).
 Un cas caché, ou une majorité de serveurs à J4, qui ne pose pas le rappel sur une pile pleine. Il faudrait alors
 réviser cette entrée et inverser le test de T07.
 
+## À confronter à J4
+
+Les questions à poser aux autres groupes à la séance d'interopérabilité, avec ce que fait notre VM aujourd'hui. On
+lance `palestre corpus <cas> --server <leur adresse>` sur des cas écrits pour l'occasion, on note le jour même ce que
+répond leur serveur, et on révise cette entrée si la majorité fait autrement.
+
+- `SENSE` ou `RAND` sur une pile pleine (64 valeurs) : le rappel est-il posé avant le `StackOverflow` ? Nous : oui,
+  la question part, puis c'est l'empilement de la réponse qui déborde.
+- `ACT k` : dans quel ordre tombent `StackUnderflow`, `BadAction` et `AlreadyActed` ? Nous : l'arité d'abord, puis
+  `k` dans `0..=3`, puis l'action déjà tentée, et seulement ensuite le rappel.
+- `CONST k` hors de la table sur une pile pleine : `BadConst` ou `StackOverflow` ? Nous : `BadConst`.
+- `CALL` vers une mauvaise cible avec seize appels en cours : `CallStackOverflow` ou `BadJump` ? Nous :
+  `CallStackOverflow`.
+
+Réponses des autres groupes : *à remplir le jour de J4.*
+
 ## Historique
 
 - 2026-10-27 — proposée.
@@ -73,3 +89,4 @@ réviser cette entrée et inverser le test de T07.
   dépilé (E.4). `SENSE` et `RAND` posent le rappel sans regarder la place sur la pile ; c'est l'empilement de la
   réponse qui lève `StackOverflow` (test `callbacks_on_a_full_stack_ask_then_overflow`).
 - 2026-11-21 — adoptée.
+- 2026-11-21 — ajout des questions à confronter à J4 (T11), par Farid GOUIRAH.
