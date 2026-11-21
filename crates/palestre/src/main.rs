@@ -1,11 +1,13 @@
 //! `palestre` : la ligne de commande du projet.
 
 use std::io::{self, Write};
-use std::net::TcpListener;
+use std::net::{TcpListener, ToSocketAddrs};
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
+use corpus::{Backend, InProcess, Remote, check_case, load_corpus};
 use exec::server::{ServerConfig, serve};
 
 #[derive(Parser)]
@@ -33,6 +35,14 @@ enum Command {
         #[arg(long, default_value_t = 30)]
         read_timeout: u64,
     },
+    /// Rejoue les cas d'un corpus (`corpus/FORMAT.md`), dans notre VM ou contre un serveur `palestre exec`.
+    Corpus {
+        /// Dossier du corpus, qui contient `edge/` et `nominal/`.
+        dir: PathBuf,
+        /// Adresse d'un serveur `palestre exec` (hôte:port) ; sans elle, les cas tournent dans notre VM.
+        #[arg(long)]
+        server: Option<String>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -48,6 +58,48 @@ fn main() -> ExitCode {
                 read_timeout: (read_timeout > 0).then(|| Duration::from_secs(read_timeout)),
             },
         ),
+        Command::Corpus { dir, server } => corpus(&dir, server.as_deref()),
+    }
+}
+
+/// Une ligne `OK`/`KO` par cas, puis le bilan. Le code de sortie vaut 1 dès qu'un cas échoue.
+fn corpus(dir: &Path, server: Option<&str>) -> ExitCode {
+    let cases = match load_corpus(dir) {
+        Ok(cases) => cases,
+        Err(error) => {
+            eprintln!("palestre corpus : {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let mut backend: Box<dyn Backend> = match server {
+        None => Box::new(InProcess),
+        Some(server) => match server.to_socket_addrs().map(|mut addrs| addrs.next()) {
+            Ok(Some(addr)) => Box::new(Remote::new(addr)),
+            Ok(None) => {
+                eprintln!("palestre corpus : {server} ne désigne aucune adresse");
+                return ExitCode::FAILURE;
+            }
+            Err(error) => {
+                eprintln!("palestre corpus : adresse {server} : {error}");
+                return ExitCode::FAILURE;
+            }
+        },
+    };
+    let mut passed = 0usize;
+    for case in &cases {
+        match check_case(case, backend.as_mut()) {
+            Ok(()) => {
+                passed += 1;
+                println!("OK  {}", case.name);
+            }
+            Err(failure) => println!("KO  {failure}"),
+        }
+    }
+    println!("{passed}/{} cas conformes", cases.len());
+    if passed == cases.len() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 

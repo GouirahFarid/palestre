@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 exec.workspace = true
+corpus.workspace = true
 clap.workspace = true
 
 [lints]

@@ -1,8 +1,11 @@
 //! Rejouer un cas contre une machine et signaler la première différence, dans l'ordre de `corpus/FORMAT.md`.
 
 use std::fmt;
+use std::net::SocketAddr;
 use std::num::NonZeroU16;
 
+use exec::client::{Client, ClientError};
+use exec::message::ErrorCode;
 use pbc::{Fault, Program};
 use vm::{ActRecord, Action, Env, Machine, Memory, Report, run_with};
 
@@ -46,6 +49,52 @@ impl Backend for InProcess {
     ) -> Result<Report, BackendError> {
         let program = Program::load(program).map_err(|_| BackendError::Refused)?;
         Ok(run_with(Machine::new(&program, *mem, budget), env))
+    }
+}
+
+/// Un serveur `palestre exec`, le nôtre ou celui d'un autre groupe. Une connexion neuve par exécution : aucun cas ne
+/// dépend du précédent, et un serveur tiers n'atteint jamais son `sessions_max`.
+pub struct Remote {
+    addr: SocketAddr,
+}
+
+impl Remote {
+    pub fn new(addr: SocketAddr) -> Remote {
+        Remote { addr }
+    }
+}
+
+impl Backend for Remote {
+    fn accepts(&mut self, program: &[u8]) -> Result<bool, BackendError> {
+        match Client::connect(self.addr).and_then(|mut client| client.submit(program)) {
+            Ok(_) => Ok(true),
+            Err(error) => match refusal(error) {
+                BackendError::Refused => Ok(false),
+                other => Err(other),
+            },
+        }
+    }
+
+    fn execute(
+        &mut self,
+        program: &[u8],
+        mem: &Memory,
+        budget: NonZeroU16,
+        env: &mut dyn Env,
+    ) -> Result<Report, BackendError> {
+        let mut client = Client::connect(self.addr).map_err(refusal)?;
+        let session = client.submit(program).map_err(refusal)?;
+        client
+            .exec(&session.session, mem, budget, env)
+            .map_err(refusal)
+    }
+}
+
+/// `bad_program` est un refus de chargement ; toute autre erreur vient du transport ou du serveur.
+fn refusal(error: ClientError) -> BackendError {
+    match error {
+        ClientError::Server(ref msg) if msg.code == ErrorCode::BadProgram => BackendError::Refused,
+        other => BackendError::Transport(other.to_string()),
     }
 }
 

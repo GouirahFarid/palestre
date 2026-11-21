@@ -9,5 +9,6 @@ pub use case::{
     Answer, Call, Case, CaseError, ExecCase, Expectation, comparable, load_case, load_corpus,
 };
 pub use check::{
-    Backend, BackendError, CaseFailure, Divergence, InProcess, Reason, Replay, check_case, compare,
+    Backend, BackendError, CaseFailure, Divergence, InProcess, Reason, Remote, Replay, check_case,
+    compare,
 };
