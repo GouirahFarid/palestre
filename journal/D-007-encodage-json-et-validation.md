@@ -77,7 +77,22 @@ Cet ordre sera appliqué par le serveur en T10 ; T09 ne fournit que les types et
 À J4, un client d'un autre groupe qui compare les octets du JSON au lieu de sa valeur, ou une majorité de serveurs qui
 répond `no_such_session` d'abord. On s'alignerait sur eux et on réviserait cette entrée.
 
+## À confronter à J4
+
+Les questions à poser aux autres groupes à la séance d'interopérabilité, avec ce que fait notre serveur aujourd'hui. On
+lance `palestre corpus <cas> --server <leur adresse>` sur des cas écrits pour l'occasion, on note le jour même ce que
+répond leur serveur, et on révise cette entrée si la majorité fait autrement.
+
+- Un `EXEC` avec une session inconnue et une `mem` de mauvaise taille : `no_such_session` ou `bad_memory` ? Nous :
+  `bad_memory`, puis la connexion se ferme.
+- Un champ JSON inconnu dans une trame : ignoré ou `bad_frame` ? Nous : ignoré.
+- Leur client compare-t-il notre `RESULT` à l'octet près, ou seulement sa valeur ? Nous écrivons du JSON compact, avec
+  les clés dans l'ordre de K.3.
+
+Réponses des autres groupes : *à remplir le jour de J4.*
+
 ## Historique
 
 - 2026-11-21 — proposée.
 - 2026-11-21 — adoptée.
+- 2026-11-21 — ajout des questions à confronter à J4 (T11).
