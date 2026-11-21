@@ -3,8 +3,8 @@
 - **Identifiant :** D-008
 - **Date :** 2026-11-21
 - **Auteurs :** Chaimae Faris
-- **Statut :** proposée
-- **Commits concernés :** —
+- **Statut :** adoptée
+- **Commits concernés :** `d0fd0aa` (proposition), `141a7ae` (serveur et commande `exec`)
 
 ## 1. Contexte
 
@@ -37,11 +37,38 @@ débloque le serveur, au risque de couper un client légitime mais lent.
 - Aucun état partagé entre deux connexions : chacune a ses propres sessions. C'est ce qui rendra le bonus B1 (serveur
   concurrent) presque gratuit.
 
-Ce que nous en avons vérifié : *à compléter.*
+L'assistant a aussi écrit le code de la tâche T10 (`crates/exec/src/server.rs` et le binaire `crates/palestre`)
+pour faire passer les 25 tests du plan. Il y a ajouté deux règles que le plan ne donnait pas :
+
+- le même délai vaut pour l'écriture (`set_write_timeout`) : un client qui ne lit plus un gros `RESULT` bloquerait
+  lui aussi le serveur ;
+- sur un `SUBMIT`, le chargement du programme est vérifié avant la limite de sessions : un programme invalide donne
+  `bad_program` (la connexion se ferme) même si la liste est pleine. C'est la même idée que pour `EXEC` dans D-007 :
+  le contenu d'abord, l'état ensuite.
+
+Ce que nous en avons vérifié : `cargo test -p exec -p palestre` passe (24 tests du serveur, 1 test de la commande,
+plus les 17 de T09). Nous avons lancé le serveur à la main :
+
+    cargo run -p palestre -- exec --listen 127.0.0.1:9000
+
+et vu la ligne `palestre exec : écoute sur 127.0.0.1:9000`. Nous avons relu la boucle `execute` de `server.rs` :
+chaque `SENSE`, `ACT` ou `RAND` de la machine devient un aller-retour avec le client, et le `RESULT` n'est envoyé que
+si tous les rappels ont abouti (K.6). Nous avons relu dans la spec la machine d'états de K.4 et les codes de K.8, en
+particulier les deux qui laissent la connexion ouverte.
 
 ## 4. Ce que nous avons décidé, et pourquoi
 
-*À rédiger.*
+Nous gardons le compteur décimal par connexion. C'est le plus simple à expliquer et à compter : deux `SUBMIT` font
+deux sessions, et `sessions_max` se vérifie avec la longueur de la liste. L'empreinte reste envoyée dans
+`pbc_sha256`, ce qui suffit au client pour vérifier que le serveur a chargé les bons octets.
+
+Nous gardons le délai de 30 s, et `--read-timeout 0` pour s'en passer. Sans délai, un seul client endormi bloquerait
+tous les autres, puisque le serveur est séquentiel. Quand le délai expire, la connexion est fermée sans `ERROR`, comme
+le veut K.8 pour un client qui se tait.
+
+Nous gardons aussi les deux règles ajoutées par l'assistant. Le délai en écriture ferme le même trou du côté d'un
+client qui ne lit plus. Et vérifier le programme avant la limite suit l'ordre déjà choisi pour `EXEC` dans D-007 :
+une requête mal formée ferme la connexion, quel que soit l'état.
 
 ## 5. Ce qui nous ferait changer d'avis
 
@@ -52,3 +79,4 @@ connexions : il faudrait alors un cache indexé par empreinte, qui serait une d�
 ## Historique
 
 - 2026-11-21 — proposée.
+- 2026-11-21 — adoptée.
