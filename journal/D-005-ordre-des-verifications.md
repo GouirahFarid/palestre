@@ -3,8 +3,8 @@
 - **Identifiant :** D-005
 - **Date :** 2026-10-27
 - **Auteurs :** Chaimae Faris
-- **Statut :** proposée
-- **Commits concernés :** —
+- **Statut :** adoptée
+- **Commits concernés :** `974c7aa` (proposition), `8285cf0` (`CONST`), `7d34639` (`CALL`), `856d8a0` (`SENSE`, `ACT`, `RAND`)
 
 ## 1. Contexte
 
@@ -39,11 +39,24 @@ L'option B. Ses conséquences sont épinglées par des tests :
 
 **Aucun cas public ne confirme ce choix.** Il faut le confronter aux autres groupes à la séance d'interopérabilité (J4).
 
-Ce que nous en avons vérifié : *à compléter.*
+Ce que nous en avons vérifié : les trois tests qui fixent les conséquences du choix passent :
+`const_reads_the_table_before_pushing` (T04), `call_pushes_its_frame_before_checking_the_target` (T06) et
+`callbacks_on_a_full_stack_ask_then_overflow` (T07). Nous avons relu les cas publics qui fixent une partie de
+l'ordre : 046b, 047b, 054b et 063 pour `StackUnderflow` en premier, et 032 pour `AlreadyActed` levée sans rappel.
 
 ## 4. Ce que nous avons décidé, et pourquoi
 
-*À rédiger.*
+Nous gardons l'option B, « dépiler, calculer, empiler », y compris pour `SENSE` et `RAND` sur une pile pleine.
+
+C'est une seule règle pour toutes les instructions, et elle se lit directement dans la notation `a b -- r` de B.3 : on
+dépile les arguments, on fait le travail de l'instruction, puis on empile le résultat, et c'est cet empilement qui
+peut lever `StackOverflow`. L'option A demanderait un ordre que la spécification n'écrit nulle part. Le prix : un
+`SENSE` sur une pile pleine pose quand même sa question avant de faillir.
+
+Aucun cas public ne tranche ces trois points. À la séance d'interopérabilité (J4), nous ferons tourner sur les
+serveurs des autres groupes un `CONST` hors table sur une pile pleine, un `CALL` vers une mauvaise cible avec seize
+appels en cours, et un `SENSE` sur une pile pleine, et nous comparerons les fautes et les rappels reçus. Si la
+majorité fait autrement, nous réviserons cette entrée (section 5).
 
 ## 5. Ce qui nous ferait changer d'avis
 
@@ -59,3 +72,4 @@ réviser cette entrée et inverser le test de T07.
   032). Seulement ensuite le rappel est posé, et l'issue empilée ne peut pas déborder puisque `arg` vient d'être
   dépilé (E.4). `SENSE` et `RAND` posent le rappel sans regarder la place sur la pile ; c'est l'empilement de la
   réponse qui lève `StackOverflow` (test `callbacks_on_a_full_stack_ask_then_overflow`).
+- 2026-11-21 — adoptée.
