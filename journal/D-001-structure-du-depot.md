@@ -3,8 +3,8 @@
 - **Identifiant :** D-001
 - **Date :** 2026-10-26
 - **Auteurs :** Farid GOUIRAH
-- **Statut :** proposée
-- **Commits concernés :** —
+- **Statut :** adoptée
+- **Commits concernés :** `10892fd` (proposition), `ad94e14` (workspace, crate `pbc` et CI)
 
 ## 1. Contexte
 
@@ -36,11 +36,25 @@ L'option B, avec sept crates : `pbc` (format), `vm` (machine), `exec` (protocole
 `clippy::indexing_slicing` et `clippy::arithmetic_side_effects` sont en `deny` dans `pbc` et `vm` seulement, pour
 qu'aucun accès indexé ni calcul ne puisse y paniquer.
 
-Ce que nous en avons vérifié : *à compléter par l'équipe.*
+Ce que nous en avons vérifié : nous avons relu le `Cargo.toml` racine et celui de chaque crate ;
+`crates/vm/Cargo.toml` ne dépend que de `pbc`. Nous avons essayé d'écrire `use serde_json` dans `crates/vm` : la
+compilation échoue, la frontière tient. `cargo test --workspace` et
+`cargo clippy --workspace --all-targets -- -D warnings` passent chez nous, et la CI est verte sur chaque pull request.
 
 ## 4. Ce que nous avons décidé, et pourquoi
 
-*À rédiger par l'équipe.*
+Nous retenons l'option B, un workspace de petites crates, avec les sept crates proposées.
+
+La raison principale : la séparation est vérifiée par le compilateur, pas par notre discipline. `serde` n'est pas dans
+les dépendances de `vm`, donc la VM ne peut pas faire de JSON, même par erreur.
+
+Deuxième raison, nous travaillons à deux en parallèle : chacun peut avancer sur sa crate sans toucher aux fichiers de
+l'autre.
+
+Enfin, les lints se règlent crate par crate. Ceux qui interdisent tout accès indexé et tout calcul qui peut paniquer
+(`indexing_slicing`, `arithmetic_side_effects`) ne s'appliquent qu'à `pbc` et `vm`, le cœur de la machine.
+
+Les crates qui n'existent pas encore (`exec`, `asm`, `corpus`, `arena`, `palestre`) seront créées par leur tâche.
 
 ## 5. Ce qui nous ferait changer d'avis
 
@@ -51,3 +65,4 @@ incrémentale qui gêne le live-coding en soutenance. On fusionnerait alors `asm
 ## Historique
 
 - 2026-10-26 — proposée.
+- 2026-11-21 — adoptée.

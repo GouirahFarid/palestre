@@ -3,7 +3,7 @@
 - **Identifiant :** D-003
 - **Date :** 2026-10-26
 - **Auteurs :** Farid GOUIRAH
-- **Statut :** proposée
+- **Statut :** adoptée
 - **Commits concernés :** `d8b3040` (proposition), `cbd4552` (table et décodeur)
 
 ## 1. Contexte
@@ -40,11 +40,23 @@ passer les onze tests de `crates/pbc/tests/fault.rs` et `decode.rs`, eux aussi t
 les étapes 1 à 3 de B.2 dans l'ordre, et ne lit les octets qu'à travers `get` : aucun décalage, même `usize::MAX`, ne
 peut le faire paniquer.
 
-Ce que nous en avons vérifié : *à compléter par l'équipe.*
+Ce que nous en avons vérifié : les onze tests de `crates/pbc/tests/fault.rs` et `decode.rs` passent, dont
+`the_table_has_43_opcodes_and_bytes_round_trip` (chacun des 43 octets donne un `Op` qui revient au même octet). Le cas
+006, un saut qui atterrit sur un `0x43` au milieu de l'opérande d'un `PUSHI16`, passe côté décodeur
+(`decoding_resumes_inside_an_operand`) et côté VM (`a_marker_inside_an_operand_is_a_valid_target`). Nous avons relu
+`crates/pbc/src/op.rs` : les coûts en gaz n'y sont écrits qu'à un seul endroit.
 
 ## 4. Ce que nous avons décidé, et pourquoi
 
-*À rédiger par l'équipe.*
+Nous retenons les deux propositions : le décodage à la volée et une table d'opcodes unique.
+
+Décoder tout le programme au chargement ne marche pas avec A.3 et B.4 : un saut peut viser un octet au milieu d'un
+opérande, et une liste d'instructions pré-décodées n'a pas d'entrée à cet endroit. En décodant à la position `pc` à
+chaque pas, ce cas n'a rien de particulier. Le prix est un `match` par pas, ce qui ne compte pas pour un budget de
+1000 unités de gaz.
+
+La table unique nous prépare à la version 2 annoncée en H.2 et révélée en soutenance : si un opcode ou un coût en gaz
+change, on le modifie à un seul endroit, dans `op.rs`, et le reste du code suit.
 
 ## 5. Ce qui nous ferait changer d'avis
 
@@ -54,3 +66,4 @@ cache de décodage indexé par octet resterait compatible avec A.3.
 ## Historique
 
 - 2026-10-26 — proposée.
+- 2026-11-21 — adoptée.
