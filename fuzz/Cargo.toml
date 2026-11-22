@@ -1,0 +1,39 @@
+[package]
+name = "palestre-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Hors du workspace principal : le fuzzing demande la chaîne nightly, et la CI n'en dépend pas (D-012).
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+pbc = { path = "../crates/pbc" }
+vm = { path = "../crates/vm" }
+exec = { path = "../crates/exec" }
+
+[[bin]]
+name = "load"
+path = "fuzz_targets/load.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "execute"
+path = "fuzz_targets/execute.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "connection"
+path = "fuzz_targets/connection.rs"
+test = false
+doc = false
+bench = false
