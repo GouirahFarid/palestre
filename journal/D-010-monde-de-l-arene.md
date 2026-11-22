@@ -3,8 +3,8 @@
 - **Identifiant :** D-010
 - **Date :** 2026-11-22
 - **Auteurs :** Farid GOUIRAH
-- **Statut :** proposée
-- **Commits concernés :** —
+- **Statut :** adoptée
+- **Commits concernés :** `52a8fc3` (proposition), `cba7178` (crate `arena`, agents, `palestre match`)
 
 ## 1. Contexte
 
@@ -43,11 +43,38 @@ par `1` et `0`, ce qui laisse penser que la spec compte à partir de 0.
 - Le générateur n'est **pas** remis en arrière quand un agent faute : il appartient à l'environnement, pas à l'agent
   ni au monde que E.2 restaure.
 
-Ce que nous en avons vérifié : *à compléter.*
+L'assistant a aussi écrit le code de la tâche T13 (`crates/arena` et `palestre match`) et les deux agents de
+démonstration, `agents/idler.asm` et `agents/harvester.asm`. Les 21 tests de la carte et des règles sont passés du
+premier coup. Le récolteur, lui, a d'abord perdu contre l'agent inerte : il tirait une nouvelle direction au hasard à
+chaque tour, tournait en rond près de son coin, et mourait au tour 84 sans avoir trouvé les ressources du centre. Il
+garde maintenant son cap dans `mem[3]` tant que la case devant lui est libre, et n'en tire un nouveau que s'il est
+bloqué. Sur les graines 0 à 29, il gagne 29 matchs ; il perd celui de la graine 14, où il longe trop longtemps le bord
+ouest avant de trouver à manger.
+
+Ce que nous en avons vérifié : `cargo test -p arena -p palestre` passe (4 tests de la carte, 17 des règles, celui du
+MVP et celui de `palestre match`). Nous avons joué un match à la main avec
+`palestre match harvester.pbc idler.pbc --seed 1 --log match.json` : 100 tours, l'agent 0 gagne avec 8 charges et
+aucune faute, et le journal est écrit. Nous avons relu `play_turn` dans `crates/arena/src/turn.rs` : instantané,
+exécution, restauration sur faute sans toucher au générateur, décrément d'énergie même après une faute, puis la mort
+qui dépose ce que l'agent porte. Nous avons relu l'annexe E, de E.2 à E.5.
 
 ## 4. Ce que nous avons décidé, et pourquoi
 
-*À rédiger.*
+Nous gardons toute la proposition.
+
+La carte est un fichier texte : on la lit d'un coup d'œil, et rejouer un match revient à redonner le même fichier et
+la même graine. La carte par défaut est symétrique, pour qu'aucune des deux places ne soit avantagée.
+
+Nous écrivons SplitMix64 nous-mêmes plutôt que de prendre `rand` : une mise à jour de la crate ne pourra jamais
+changer le résultat d'un match, et le test `splitmix64_matches_the_reference_sequence` vérifie la suite de référence.
+Le générateur n'est pas remis en arrière quand un agent faute, parce que E.2 restaure l'agent et le monde, et que le
+générateur n'est ni l'un ni l'autre : il fait partie de l'environnement, comme le client qui fournit le hasard en K.1.
+
+Les identifiants 0 et 1 suivent le cas 207 du corpus, et l'énergie de 100 laisse 100 tours à un agent qui ne fait
+rien, ce qui suffit pour qu'un bon agent fasse la différence.
+
+Nous gardons aussi la correction du récolteur : garder son cap est la plus petite règle qui le fait gagner, et un
+agent de démonstration doit rester simple à lire.
 
 ## 5. Ce qui nous ferait changer d'avis
 
@@ -57,3 +84,5 @@ organiser des tournois croisés : on adopterait le leur.
 ## Historique
 
 - 2026-11-22 — proposée.
+- 2026-11-22 — adoptée. Jalon MVP atteint : `palestre match` oppose deux agents, et le
+  récolteur bat l'agent inerte.
