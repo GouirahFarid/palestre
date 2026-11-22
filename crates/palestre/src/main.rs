@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use arena::{Config, Map};
 use asm::AsmError;
 use clap::{ArgAction, Parser, Subcommand};
 use corpus::{Backend, Call, InProcess, Remote, check_case, load_corpus};
@@ -19,6 +20,9 @@ use pbc::Program;
 use vm::{MEM_SIZE, Machine, run_with};
 
 use crate::run::Scripted;
+
+/// La carte par défaut (D-010), embarquée pour que `palestre match` marche depuis n'importe quel dossier.
+const DEFAULT_MAP: &str = include_str!("../../../maps/default.map");
 
 #[derive(Parser)]
 #[command(
@@ -87,6 +91,28 @@ enum Command {
         #[arg(long = "rand", allow_negative_numbers = true)]
         rand: Vec<i64>,
     },
+    /// Joue un match entre deux agents `.pbc` (annexe E) et affiche le vainqueur.
+    Match {
+        /// Programme de l'agent 0, qui part de la case `A`.
+        a: PathBuf,
+        /// Programme de l'agent 1, qui part de la case `B`.
+        b: PathBuf,
+        /// Carte à jouer (format de D-010) ; sans elle, `maps/default.map`.
+        #[arg(long)]
+        map: Option<PathBuf>,
+        /// Graine du générateur qui répond aux `RAND`.
+        #[arg(long, default_value_t = 0)]
+        seed: u64,
+        /// Nombre maximal de tours (E.5).
+        #[arg(long, default_value_t = 500)]
+        turns: u32,
+        /// Énergie de départ des deux agents.
+        #[arg(long, default_value_t = 100)]
+        energy: i64,
+        /// Fichier où écrire le journal du match, en JSON.
+        #[arg(long)]
+        log: Option<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -113,7 +139,80 @@ fn main() -> ExitCode {
             act,
             rand,
         } => run(&program, budget, &mem, Scripted::new(&sense, act, &rand)),
+        Command::Match {
+            a,
+            b,
+            map,
+            seed,
+            turns,
+            energy,
+            log,
+        } => play_match(
+            [&a, &b],
+            map.as_deref(),
+            &Config {
+                seed,
+                turns_max: turns,
+                initial_energy: energy,
+                ..Config::default()
+            },
+            log.as_deref(),
+        ),
     }
+}
+
+/// Le bilan du match : tours joués, état final de chaque agent, vainqueur ou match nul.
+fn play_match(
+    agents: [&Path; 2],
+    map: Option<&Path>,
+    config: &Config,
+    log: Option<&Path>,
+) -> ExitCode {
+    let [a, b] = agents;
+    let (a, b) = match (load("match", a), load("match", b)) {
+        (Ok(a), Ok(b)) => (a, b),
+        (Err(code), _) | (_, Err(code)) => return code,
+    };
+    let text = match map {
+        Some(path) => match fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(error) => return fail("match", path, error),
+        },
+        None => DEFAULT_MAP.to_string(),
+    };
+    let map = match Map::parse(&text) {
+        Ok(map) => map,
+        Err(error) => return fail("match", map.unwrap_or(Path::new("carte par défaut")), error),
+    };
+    let result = arena::play([&a, &b], &map, config);
+    if let Some(path) = log {
+        let written = result
+            .to_json()
+            .map_err(io::Error::other)
+            .and_then(|json| fs::write(path, json));
+        if let Err(error) = written {
+            return fail("match", path, error);
+        }
+    }
+    println!("tours joués : {}", result.turns.len());
+    for agent in &result.final_state.agents {
+        let faults = result
+            .turns
+            .iter()
+            .flat_map(|turn| &turn.agents)
+            .filter(|played| played.id == agent.id && played.fault.is_some())
+            .count();
+        let state = if agent.alive { "vivant" } else { "mort" };
+        println!(
+            "agent {} : ({}, {}) énergie {}, porté {}, {state}, {faults} faute(s)",
+            agent.id, agent.x, agent.y, agent.energy, agent.carried
+        );
+    }
+    match result.winner {
+        Some(id) => println!("vainqueur : agent {id}"),
+        None => println!("match nul"),
+    }
+    ExitCode::SUCCESS
 }
 
 /// Une erreur s'affiche `fichier:ligne : message`, comme celles d'un compilateur.

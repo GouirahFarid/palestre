@@ -53,6 +53,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "arena"
+version = "0.1.0"
+dependencies = [
+ "asm",
+ "pbc",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "vm",
+]
+
+[[package]]
 name = "asm"
 version = "0.1.0"
 dependencies = [
@@ -318,6 +330,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 name = "palestre"
 version = "0.1.0"
 dependencies = [
+ "arena",
  "asm",
  "clap",
  "corpus",

@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+arena.workspace = true
 asm.workspace = true
 corpus.workspace = true
 exec.workspace = true

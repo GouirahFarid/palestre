@@ -8,6 +8,7 @@ edition = "2024"
 rust-version = "1.85"
 
 [workspace.dependencies]
+arena = { path = "crates/arena" }
 asm = { path = "crates/asm" }
 pbc = { path = "crates/pbc" }
 vm = { path = "crates/vm" }
