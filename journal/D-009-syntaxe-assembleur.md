@@ -3,8 +3,9 @@
 - **Identifiant :** D-009
 - **Date :** 2026-10-27
 - **Auteurs :** Chaimae Faris
-- **Statut :** proposée
-- **Commits concernés :** —
+- **Statut :** adoptée
+- **Commits concernés :** `8de3534` (proposition), `b6d250d` (crate `asm`), `722eb3e` (commandes `asm`, `disasm`,
+  `run`)
 
 ## 1. Contexte
 
@@ -70,14 +71,32 @@ sans que le plan les impose :
 - `.const` et `.byte` acceptent plusieurs valeurs sur une ligne, et les directives sont insensibles à la casse,
   comme les mnémoniques.
 
-Les sous-commandes `palestre asm`, `disasm` et `run` du plan attendent le binaire de T11 ; elles ne sont pas encore
-écrites.
+Les sous-commandes `palestre asm`, `disasm` et `run` du plan attendaient le binaire `palestre` (T10, T11).
+L'assistant les a écrites ensuite. `palestre run` répond aux rappels avec `--sense`, `--act` et `--rand`, et affiche
+`{"calls": […], "result": {…}}`, la forme exacte d'une exécution de `expected.json`.
 
-Ce que nous en avons vérifié : *à compléter par l'équipe.*
+Ce que nous en avons vérifié : `cargo test -p asm -p palestre` passe, dont les onze tests de l'assembleur et du
+désassembleur (avec la propriété `asm_of_disasm_is_identity`, essayée par `proptest` sur des programmes au hasard) et
+les trois tests des commandes. Nous avons fait l'aller-retour `palestre disasm` puis `palestre asm` sur tous les
+`program.pbc` du corpus public : les 62 qui se chargent reviennent à l'identique, octet pour octet, et les 3 autres
+sont les cas refusés au chargement. Nous avons lu le désassemblage du cas 207 : `JZ 5 ; 0x0002 -> 0x000A` tombe bien
+sur le `JUMPDEST` en `0x000A`, comme le veut B.4 (`cible = pc + taille + d`). Enfin, `palestre run` sur le cas 207
+avec `--sense 6=1` affiche la même forme qu'une exécution de son `expected.json`.
 
 ## 4. Ce que nous avons décidé, et pourquoi
 
-*À rédiger par l'équipe.*
+Nous retenons l'option B : l'auteur écrit lui-même `JUMPDEST`, et l'assembleur ne fait que résoudre les adresses.
+Le binaire est exactement ce qui est écrit, rien n'est ajouté dans son dos.
+
+C'est aussi ce qui rend l'aller-retour exact : `asm(disasm(p)) == p` pour tout programme, même avec des octets qui ne
+se décodent pas, grâce à `.byte`. À J4, on pourra donc relire le `.pbc` d'un autre groupe, le modifier et le
+réassembler sans rien perdre.
+
+Nous gardons les quatre choix de détail de la section 3. Le plus important est d'encoder les opérandes avec
+`Op::operand`, la même table que le décodeur (D-003) : l'assembleur et le décodeur ne peuvent pas se contredire.
+
+Enfin, `palestre run` affiche la forme d'une exécution de `expected.json`. Pour écrire un nouveau cas, ou vérifier un
+agent, on compare directement sa sortie au corpus.
 
 ## 5. Ce qui nous ferait changer d'avis
 
@@ -87,3 +106,4 @@ silencieuse, quand une étiquette visée par un saut n'est pas suivie d'un `JUMP
 ## Historique
 
 - 2026-10-27 — proposée.
+- 2026-11-22 — adoptée.
