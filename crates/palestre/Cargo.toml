@@ -5,8 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-exec.workspace = true
+asm.workspace = true
 corpus.workspace = true
+exec.workspace = true
+pbc.workspace = true
+vm.workspace = true
+serde_json.workspace = true
 clap.workspace = true
 
 [lints]
