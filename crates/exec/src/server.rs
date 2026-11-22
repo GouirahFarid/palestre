@@ -1,4 +1,5 @@
-//! Le serveur de l'annexe K, séquentiel (D-008) : une connexion après l'autre, chacune avec ses propres sessions.
+//! Le serveur de l'annexe K : séquentiel par défaut (D-008), une connexion après l'autre, ou un thread par connexion
+//! (D-013). Dans les deux cas, chaque connexion a ses propres sessions.
 //!
 //! Machine d'états d'une connexion (K.4) : `Greeting` n'accepte que `OPEN`, `Idle` accepte `SUBMIT` et `EXEC`, et
 //! `Executing` n'accepte que la réplique du rappel en cours.
@@ -6,8 +7,9 @@
 use std::convert::Infallible;
 use std::fmt;
 use std::io::{self, Read, Write};
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU16;
+use std::thread;
 use std::time::Duration;
 
 use pbc::{Program, SPEC_VERSION};
@@ -74,30 +76,54 @@ impl fmt::Display for ConnectionEnd {
 /// Sert les connexions une par une, indéfiniment. Une connexion qui échoue est consignée sur la sortie d'erreur, et
 /// le serveur passe à la suivante.
 pub fn serve(listener: TcpListener, config: &ServerConfig) -> io::Result<()> {
-    let timeout = config.read_timeout.filter(|delay| !delay.is_zero());
     for stream in listener.incoming() {
-        let mut stream = match stream {
+        match stream {
+            Ok(stream) => serve_one(stream, config),
+            Err(error) => eprintln!("palestre exec : connexion manquée : {error}"),
+        }
+    }
+    Ok(())
+}
+
+/// Un thread par connexion (D-013). Rien n'est partagé entre threads : chaque connexion possède son flux, sa copie
+/// de la configuration et ses sessions.
+pub fn serve_concurrent(listener: TcpListener, config: &ServerConfig) -> io::Result<()> {
+    for stream in listener.incoming() {
+        let stream = match stream {
             Ok(stream) => stream,
             Err(error) => {
                 eprintln!("palestre exec : connexion manquée : {error}");
                 continue;
             }
         };
-        let peer = stream
-            .peer_addr()
-            .map_or_else(|_| "client inconnu".to_string(), |addr| addr.to_string());
-        // Le même délai vaut pour l'écriture : un client qui ne lit plus bloquerait lui aussi le serveur.
-        if let Err(error) = stream
-            .set_read_timeout(timeout)
-            .and_then(|()| stream.set_write_timeout(timeout))
-        {
-            eprintln!("palestre exec : {peer} : {error}");
-            continue;
+        // `stream` (un `TcpStream`) et `config` (un `u32` et une `Option<Duration>`) sont `Send` et possédés : ils
+        // sont déplacés dans le thread, ce qui satisfait `Send + 'static` sans `Arc` ni `Mutex`.
+        let config = config.clone();
+        // `Builder::spawn` plutôt que `thread::spawn`, qui panique quand le système refuse un thread de plus.
+        let spawned = thread::Builder::new().spawn(move || serve_one(stream, &config));
+        if let Err(error) = spawned {
+            eprintln!("palestre exec : connexion abandonnée, pas de thread : {error}");
         }
-        let end = handle_connection(&mut stream, config);
-        eprintln!("palestre exec : {peer} : {end}");
     }
     Ok(())
+}
+
+/// Toute une connexion TCP : délais, protocole, puis une ligne sur la sortie d'erreur pour dire comment elle a fini.
+fn serve_one(mut stream: TcpStream, config: &ServerConfig) {
+    let timeout = config.read_timeout.filter(|delay| !delay.is_zero());
+    let peer = stream
+        .peer_addr()
+        .map_or_else(|_| "client inconnu".to_string(), |addr| addr.to_string());
+    // Le même délai vaut pour l'écriture : un client qui ne lit plus bloquerait lui aussi le serveur.
+    if let Err(error) = stream
+        .set_read_timeout(timeout)
+        .and_then(|()| stream.set_write_timeout(timeout))
+    {
+        eprintln!("palestre exec : {peer} : {error}");
+        return;
+    }
+    let end = handle_connection(&mut stream, config);
+    eprintln!("palestre exec : {peer} : {end}");
 }
 
 /// Toute la vie d'une connexion. Générique pour être testée et fuzzée en mémoire (T14).
