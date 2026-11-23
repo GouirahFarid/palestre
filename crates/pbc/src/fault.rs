@@ -4,7 +4,9 @@ use std::fmt;
 
 /// Fautes d'exécution d'un tour (B.5). `BadHeader` n'en fait pas partie : c'est une erreur de chargement, levée avant
 /// toute exécution (`LoadError`, D-002).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+///
+/// L'ordre (`Ord`) est celui de B.5 : le vérificateur s'en sert pour trier ses annonces (D-014).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Fault {
     BadConst,
     BadOpcode,
