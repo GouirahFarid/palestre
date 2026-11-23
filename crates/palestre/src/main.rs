@@ -15,7 +15,7 @@ use asm::AsmError;
 use clap::{ArgAction, Parser, Subcommand};
 use corpus::{Backend, Call, InProcess, Remote, check_case, load_corpus};
 use exec::message::ResultMsg;
-use exec::server::{ServerConfig, serve};
+use exec::server::{ServerConfig, serve, serve_concurrent};
 use pbc::Program;
 use vm::{MEM_SIZE, Machine, run_with};
 
@@ -37,11 +37,14 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Sert le protocole d'exécution distante (annexe K), une connexion après l'autre.
+    /// Sert le protocole d'exécution distante (annexe K) : une connexion après l'autre, ou toutes à la fois.
     Exec {
         /// Adresse d'écoute, par exemple 127.0.0.1:9000 (port 0 : un port libre choisi par le système).
         #[arg(long)]
         listen: String,
+        /// Sert les connexions en même temps, un thread par connexion (D-013).
+        #[arg(long)]
+        concurrent: bool,
         /// Nombre de sessions qu'une connexion peut ouvrir, annoncé dans READY.
         #[arg(long, default_value_t = 16)]
         sessions_max: u32,
@@ -119,10 +122,12 @@ fn main() -> ExitCode {
     match Cli::parse().command {
         Command::Exec {
             listen,
+            concurrent,
             sessions_max,
             read_timeout,
         } => exec(
             &listen,
+            concurrent,
             &ServerConfig {
                 sessions_max,
                 read_timeout: (read_timeout > 0).then(|| Duration::from_secs(read_timeout)),
@@ -315,7 +320,7 @@ fn corpus(dir: &Path, server: Option<&str>) -> ExitCode {
     }
 }
 
-fn exec(listen: &str, config: &ServerConfig) -> ExitCode {
+fn exec(listen: &str, concurrent: bool, config: &ServerConfig) -> ExitCode {
     let listener = match TcpListener::bind(listen) {
         Ok(listener) => listener,
         Err(error) => {
@@ -333,7 +338,12 @@ fn exec(listen: &str, config: &ServerConfig) -> ExitCode {
         eprintln!("palestre exec : {error}");
         return ExitCode::FAILURE;
     }
-    match serve(listener, config) {
+    let served = if concurrent {
+        serve_concurrent(listener, config)
+    } else {
+        serve(listener, config)
+    };
+    match served {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("palestre exec : {error}");
