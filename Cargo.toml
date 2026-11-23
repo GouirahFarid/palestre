@@ -12,6 +12,7 @@ arena = { path = "crates/arena" }
 asm = { path = "crates/asm" }
 pbc = { path = "crates/pbc" }
 vm = { path = "crates/vm" }
+verify = { path = "crates/verify" }
 corpus = { path = "crates/corpus" }
 exec = { path = "crates/exec" }
 proptest = "1"

@@ -17,6 +17,7 @@ use corpus::{Backend, Call, InProcess, Remote, check_case, load_corpus};
 use exec::message::ResultMsg;
 use exec::server::{ServerConfig, serve, serve_concurrent};
 use pbc::Program;
+use verify::Limits;
 use vm::{MEM_SIZE, Machine, run_with};
 
 use crate::run::Scripted;
@@ -72,6 +73,11 @@ enum Command {
     Disasm {
         /// Fichier `.pbc` à lire.
         input: PathBuf,
+    },
+    /// Vérifie un `.pbc` avant toute exécution (D-014) : sauts, pile et appels, sur tous les chemins.
+    Verify {
+        /// Fichier `.pbc` à vérifier.
+        program: PathBuf,
     },
     /// Exécute un tour en local et affiche `{"calls": […], "result": {…}}`, la forme d'une exécution de
     /// `expected.json`.
@@ -136,6 +142,7 @@ fn main() -> ExitCode {
         Command::Corpus { dir, server } => corpus(&dir, server.as_deref()),
         Command::Asm { input, output } => asm(&input, &output),
         Command::Disasm { input } => disasm(&input),
+        Command::Verify { program } => verify_program(&program),
         Command::Run {
             program,
             budget,
@@ -247,6 +254,35 @@ fn disasm(input: &Path) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(code) => code,
+    }
+}
+
+/// Une ligne par faute possible (`0x0008 StackUnderflow`), puis les bornes. Le code de sortie vaut 1 dès que le
+/// programme n'est pas sûr, y compris quand l'analyse n'a pas pu tout explorer.
+fn verify_program(path: &Path) -> ExitCode {
+    let program = match load("verify", path) {
+        Ok(program) => program,
+        Err(code) => return code,
+    };
+    let verdict = verify::verify(&program);
+    for issue in &verdict.issues {
+        println!("{:#06x} {}", issue.pc, issue.fault);
+    }
+    println!(
+        "pile max : {}, appels max : {}, états : {}",
+        verdict.max_stack, verdict.max_frames, verdict.states
+    );
+    if !verdict.complete {
+        println!(
+            "analyse incomplète : limite de {} états atteinte",
+            Limits::default().max_states
+        );
+    }
+    if verdict.is_safe() {
+        println!("sûr : aucune faute structurelle possible");
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 

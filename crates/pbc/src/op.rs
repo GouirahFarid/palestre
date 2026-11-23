@@ -186,6 +186,36 @@ impl Op {
         }
     }
 
+    /// (valeurs dépilées, valeurs empilées), d'après la colonne « Pile » de B.3. `ACT` dépile son argument et empile
+    /// son issue ; `SENSE` et `RAND` empilent la réponse de l'environnement. Le vérificateur s'en sert (D-014).
+    pub fn stack_effect(self) -> (u8, u8) {
+        match self {
+            Op::Halt | Op::Jmp | Op::JumpDest | Op::Call | Op::Return => (0, 0),
+            Op::Const | Op::PushI16 | Op::Load | Op::Sense | Op::Rand | Op::Gas => (0, 1),
+            Op::Drop | Op::Store | Op::Jz | Op::Jnz | Op::JmpX | Op::CallX | Op::Trace => (1, 0),
+            Op::ConstX | Op::Neg | Op::Not | Op::BNot | Op::LoadX | Op::Act => (1, 1),
+            Op::Dup => (1, 2),
+            Op::StoreX => (2, 0),
+            Op::Add
+            | Op::Sub
+            | Op::Mul
+            | Op::Div
+            | Op::Mod
+            | Op::Eq
+            | Op::Lt
+            | Op::Gt
+            | Op::And
+            | Op::Or
+            | Op::Xor
+            | Op::Shl
+            | Op::Shr
+            | Op::Sar => (2, 1),
+            Op::Swap => (2, 2),
+            Op::Over => (2, 3),
+            Op::Rot => (3, 3),
+        }
+    }
+
     /// Cherche un opcode par son mnémonique, sans tenir compte de la casse.
     pub fn from_mnemonic(text: &str) -> Option<Op> {
         Op::ALL
