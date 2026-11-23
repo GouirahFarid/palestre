@@ -113,6 +113,27 @@ chaque instruction :
 Une erreur s'affiche `fichier:ligne : message`, par exemple `add.asm:2 : mnémonique inconnu « FOO »`, avec le code
 de sortie 1. La syntaxe est dans `journal/D-009-syntaxe-assembleur.md`.
 
+### `palestre verify` : le vérificateur statique
+
+```bash
+palestre verify add.pbc
+palestre verify corpus/edge/023-call-stack-overflow/program.pbc
+```
+
+```
+pile max : 2, appels max : 0, états : 5
+sûr : aucune faute structurelle possible
+```
+
+```
+0x0005 CallStackOverflow
+pile max : 0, appels max : 16, états : 33
+```
+
+Une ligne par faute possible, avec son adresse, puis les bornes ; le code de sortie vaut 1 dès qu'une faute est
+possible. Les fautes qui dépendent des valeurs (`DivByZero`, `OutOfGas`…) ne sont pas cherchées, et un `JMPX` ou un
+`CALLX` donne toujours un `BadJump` possible. Le détail est dans `journal/D-014-verificateur-statique.md`.
+
 ### `palestre run` : un tour en local
 
 ```bash
@@ -129,7 +150,7 @@ scriptent : `--sense K=V` (un capteur absent répond `BadSensor`), `--act true|f
 ## Les tests
 
 ```bash
-cargo test --workspace                          # 198 tests, dont 9 propriétés proptest
+cargo test --workspace                          # 225 tests, dont 11 propriétés proptest
 PROPTEST_CASES=5000 cargo test --release        # les propriétés, plus longuement
 ```
 

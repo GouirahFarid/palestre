@@ -6,19 +6,19 @@ Le dépôt est un workspace Cargo (D-001). Chaque crate a un rôle, et les dépe
 schéma montre les principales, le tableau les donne toutes :
 
 ```
-                    palestre            dépend des six autres
+                    palestre            dépend des sept autres
                        │
-        ┌──────────────┼──────────────┐
-        ▼              ▼              ▼
-     corpus          arena           asm
-        │              │              │
-        ▼              │              │
-      exec             │              │
-        │              │              │
-        ├────► vm ◄────┘              │
-        │      │                      │
-        ▼      │                      │
-       pbc ◄───┴──────────────────────┘
+        ┌──────────────┼──────────────┬──────────────┐
+        ▼              ▼              ▼              ▼
+     corpus          arena         verify           asm
+        │              │              │              │
+        ▼              │              │              │
+      exec             │              │              │
+        │              │              │              │
+        ├────► vm ◄────┴──────────────┘              │
+        │      │                                     │
+        ▼      │                                     │
+       pbc ◄───┴─────────────────────────────────────┘
 ```
 
 | Crate      | Dépend de         | Rôle                                                                                   |
@@ -29,7 +29,8 @@ schéma montre les principales, le tableau les donne toutes :
 | `exec`     | `pbc`, `vm`       | l'annexe K : trames (K.2), messages JSON, serveur séquentiel, client                    |
 | `corpus`   | `pbc`, `vm`, `exec` | la lecture des cas du corpus et leur rejeu, dans notre VM ou contre un serveur       |
 | `arena`    | `pbc`, `vm`       | le match : carte, déroulement d'un tour (E.2), capteurs, actions, journal du match       |
-| `palestre` | toutes            | le binaire : `exec`, `corpus`, `asm`, `disasm`, `run`, `match`                          |
+| `verify`   | `pbc`, `vm`       | le vérificateur statique : tous les états abstraits atteignables, avant toute exécution (D-014) |
+| `palestre` | toutes            | le binaire : `exec`, `corpus`, `asm`, `disasm`, `verify`, `run`, `match`                |
 
 `pbc` et `vm` ne dépendent de rien qui touche au monde extérieur : ni réseau, ni horloge, ni source d'aléa. Seul `exec`
 ouvre des sockets, et la seule source d'aléa est le `SplitMix64` de l'arène, tiré d'une graine explicite (D-010).
