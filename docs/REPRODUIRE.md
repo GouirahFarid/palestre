@@ -150,7 +150,7 @@ scriptent : `--sense K=V` (un capteur absent répond `BadSensor`), `--act true|f
 ## Les tests
 
 ```bash
-cargo test --workspace                          # 225 tests, dont 11 propriétés proptest
+cargo test --workspace                          # 243 tests, dont 11 propriétés proptest
 PROPTEST_CASES=5000 cargo test --release        # les propriétés, plus longuement
 ```
 
