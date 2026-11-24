@@ -5,7 +5,15 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+asm.workspace = true
+pbc.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+arena.workspace = true
+proptest.workspace = true
+verify.workspace = true
+vm.workspace = true
 
 [lints]
 workspace = true

@@ -1,0 +1,77 @@
+// Le récolteur, en agon : la stratégie de harvester.asm, une seule action par tour, la première règle qui s'applique.
+//   1. il porte quelque chose et son énergie est sous 50 : il mange tout ce qu'il porte ;
+//   2. sa case porte une ressource : il la ramasse ;
+//   3. un voisin libre porte une ressource : il y va (le premier dans l'ordre nord, est, sud, ouest) ;
+//   4. il lui reste plus de 15 d'énergie : il garde son cap tant que la case devant lui est libre ; sinon il en
+//      prend un nouveau, la première direction libre en partant de rand() & 3 ;
+//   5. sinon, il attend.
+
+// Les capteurs (E.3).
+const ENERGY = 2;
+const CARRIED = 3;
+const HERE = 4;
+const BLOCKED = 8;
+const RESOURCES = 9;
+const AGENTS = 13;
+
+// Les actions (E.4).
+const MOVE = 0;
+const TAKE = 1;
+const EAT = 3;
+
+// La cellule qui garde le cap d'un tour à l'autre : sans elle, un nouveau tirage à chaque tour le fait tourner en rond.
+const HEADING = 3;
+
+// Le bit `d` d'un masque de voisinage, de 0 (nord) à 3 (ouest).
+fn bit(mask, d) {
+    return (mask >>> d) & 1;
+}
+
+fn main() {
+    // 1. Manger.
+    if sense(CARRIED) != 0 {
+        if sense(ENERGY) < 50 {
+            act(EAT, sense(CARRIED));
+            return;
+        }
+    }
+
+    // 2. Ramasser.
+    if sense(HERE) != 0 {
+        act(TAKE, 0);
+        return;
+    }
+
+    // 3. Aller vers un voisin libre qui porte une ressource.
+    let food = sense(RESOURCES) & ~(sense(BLOCKED) | sense(AGENTS));
+    if food != 0 {
+        let d = 0;
+        while bit(food, d) == 0 {
+            d = d + 1;
+        }
+        act(MOVE, d);
+        return;
+    }
+
+    // 4. Errer, si l'énergie le permet : le cap d'abord, puis un nouveau cap.
+    if sense(ENERGY) > 15 {
+        let blocked = sense(BLOCKED) | sense(AGENTS);
+        if bit(blocked, mem[HEADING]) == 0 {
+            act(MOVE, mem[HEADING]);
+            return;
+        }
+        let heading = rand() & 3;
+        let tries = 4;
+        while tries != 0 {
+            if bit(blocked, heading) == 0 {
+                mem[HEADING] = heading;
+                act(MOVE, heading);
+                return;
+            }
+            heading = (heading + 1) & 3;
+            tries = tries - 1;
+        }
+    }
+
+    // 5. Attendre.
+}

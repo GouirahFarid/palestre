@@ -133,6 +133,35 @@ pub enum BinOp {
     Shr,
 }
 
+impl Stmt {
+    /// La ligne où commence l'instruction.
+    pub fn line(&self) -> u32 {
+        match self {
+            Stmt::Let { line, .. }
+            | Stmt::Assign { line, .. }
+            | Stmt::MemStore { line, .. }
+            | Stmt::If { line, .. }
+            | Stmt::While { line, .. }
+            | Stmt::Return { line, .. }
+            | Stmt::Halt { line }
+            | Stmt::Expr { line, .. } => *line,
+        }
+    }
+}
+
+impl Expr {
+    /// La ligne où commence l'expression (celle de l'opérateur, pour une opération binaire).
+    pub fn line(&self) -> u32 {
+        match self {
+            Expr::Int(_, line) | Expr::Var(_, line) => *line,
+            Expr::Unary { line, .. }
+            | Expr::Binary { line, .. }
+            | Expr::Call { line, .. }
+            | Expr::MemLoad { line, .. } => *line,
+        }
+    }
+}
+
 /// L'opérateur s'affiche avec son symbole dans le source.
 impl fmt::Display for UnOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
