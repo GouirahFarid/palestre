@@ -6,7 +6,7 @@ Le dépôt est un workspace Cargo (D-001). Chaque crate a un rôle, et les dépe
 schéma montre les principales, le tableau les donne toutes :
 
 ```
-                    palestre            dépend des sept autres
+                    palestre            dépend des huit autres
                        │
         ┌──────────────┼──────────────┬──────────────┐
         ▼              ▼              ▼              ▼
@@ -30,8 +30,8 @@ schéma montre les principales, le tableau les donne toutes :
 | `corpus`   | `pbc`, `vm`, `exec` | la lecture des cas du corpus et leur rejeu, dans notre VM ou contre un serveur       |
 | `arena`    | `pbc`, `vm`       | le match : carte, déroulement d'un tour (E.2), capteurs, actions, journal du match       |
 | `verify`   | `pbc`, `vm`       | le vérificateur statique : tous les états abstraits atteignables, avant toute exécution (D-014) |
-| `agon`     | —                 | le langage des agents : lexer et parseur écrits à la main, arbre syntaxique (D-015)     |
-| `palestre` | toutes sauf `agon` | le binaire : `exec`, `corpus`, `asm`, `disasm`, `verify`, `run`, `match`                |
+| `agon`     | `pbc`, `asm`      | le langage des agents : analyse écrite à la main (D-015), vérifications et génération de code (D-016) |
+| `palestre` | toutes            | le binaire : `exec`, `corpus`, `asm`, `disasm`, `compile`, `verify`, `run`, `match`     |
 
 `pbc` et `vm` ne dépendent de rien qui touche au monde extérieur : ni réseau, ni horloge, ni source d'aléa. Seul `exec`
 ouvre des sockets, et la seule source d'aléa est le `SplitMix64` de l'arène, tiré d'une graine explicite (D-010).
