@@ -1,0 +1,96 @@
+# D-016 — Génération de code `agon` : les variables en mémoire, à adresses fixes
+
+- **Identifiant :** D-016
+- **Date :** 2026-11-24
+- **Auteurs :** Farid GOUIRAH
+- **Statut :** proposée
+- **Commits concernés :** —
+
+## 1. Contexte
+
+B3 (D-015) produit l'arbre d'un programme `agon` ; il reste à en tirer du bytecode `PBC`. La machine impose trois
+choses. Elle n'a ni registres ni accès profond à la pile : `DUP`, `SWAP`, `OVER` et `ROT` n'atteignent que les trois
+valeurs du sommet (B.3), donc une variable ne peut pas vivre « sous » d'autres valeurs. Sa mémoire fait 256 cellules,
+**persistantes** d'un tour à l'autre (B.1). Et sa pile d'appels fait 16 cadres, qui ne contiennent que des adresses de
+retour.
+
+Il faut aussi vérifier ce que la grammaire ne voit pas : les noms inconnus, le nombre d'arguments, et les capteurs et
+actions, dont le numéro est un opérande immédiat de `SENSE k` et `ACT k`, donc connu à la compilation.
+
+## 2. Options envisagées
+
+### Option A — les variables dans la pile
+Garder chaque variable sur la pile et la ramener au sommet avec `SWAP`, `ROT` et `OVER`. Compromis : impossible
+au-delà de trois valeurs de profondeur, donc dès qu'une expression utilise plus de deux ou trois variables.
+
+### Option B — les variables en mémoire, à adresses fixes par fonction
+Chaque paramètre et chaque `let` reçoit sa cellule, lue par `LOAD k` (3 de gaz) et écrite par `STORE k` (4).
+Compromis : pas de récursion, puisque deux activations d'une même fonction partageraient leurs cellules.
+
+### Option C — une pile de cadres simulée en mémoire
+Un pointeur de cadre dans une cellule, et chaque variable à un décalage de ce pointeur. Compromis : la récursion
+devient possible, mais chaque lecture coûte `LOAD fp ; PUSHI16 off ; ADD ; LOADX`, environ 10 de gaz au lieu de 3.
+
+## 3. Ce que l'assistant IA a proposé
+
+L'option B. Les cellules `128..=255` sont au compilateur, allouées de 255 vers le bas, une par paramètre ou `let` de
+chaque fonction ; au-delà de 128 variables, c'est une erreur. Les cellules `0..=127` sont à l'agent, par `mem[…]` :
+une adresse constante hors de `0..=127` est refusée, pour qu'un `mem[200] = …` n'écrase pas une variable en silence.
+La récursion, directe ou mutuelle, est refusée : on cherche les cycles du graphe d'appel par un parcours en profondeur
+à trois couleurs, et l'erreur nomme le cycle (`récursion interdite : f → g → f`). Sans cycle, la chaîne d'appels la
+plus longue depuis `main` est connue : au-delà de 16 cadres, `main` compris, c'est aussi une erreur, plutôt qu'un
+`CallStackOverflow` à l'exécution.
+
+Les vérifications, avant de générer quoi que ce soit :
+
+- les fonctions ont des noms uniques, et `main` existe, sans paramètre ;
+- une variable est visible de son `let` à la fin de son bloc, et son nom est unique dans la fonction : une variable
+  déclarée dans un `if` ne peut pas être lue après lui, où elle garderait la valeur d'un tour précédent ;
+- les constantes s'évaluent à la compilation, avec l'arithmétique enveloppante de la machine (B.6), et ne peuvent
+  citer que des constantes définies avant elles ; une variable ne peut pas porter le nom d'une constante ;
+- les fonctions prédéfinies sont `sense(K)`, `act(K, arg)`, `rand()`, `gas()` et `trace(e)` ; leur arité est exacte,
+  et `K` est une expression constante, au plus 255 pour `sense` et 3 pour `act`.
+
+Les conventions de génération :
+
+- le code commence par `CALL main ; HALT` ;
+- un appel `f(a, b)` empile `a` puis `b`, et le prologue de `f` fait `STORE b ; STORE a`, dans l'ordre inverse ;
+- toute fonction rend une valeur sur la pile : `return;` et la fin du corps rendent 0 ;
+- une instruction-expression est suivie de `DROP`, sauf `trace(…)`, dont `TRACE` ne laisse rien ; en position
+  d'expression, `trace(e)` vaut 0 ;
+- chaque étiquette générée est suivie d'un `JUMPDEST` ;
+- `<=` devient `GT ; NOT`, `>=` devient `LT ; NOT`, et `!=` devient `EQ ; NOT` ;
+- un littéral sur `i16` devient `PUSHI16`, un autre une `.const` dédoublonnée et un `CONST k` ; un littéral précédé
+  d'un `-` est un seul littéral négatif ;
+- une constante `const` est remplacée par sa valeur ; les autres expressions ne sont pas pré-calculées.
+
+`if` et `while` donnent :
+
+```
+; if c { A } else { B }          ; while c { A }
+    <c>                          debut:
+    JZ sinon                         JUMPDEST
+    <A>                              <c>
+    JMP fin                          JZ fin
+sinon:                               <A>
+    JUMPDEST                         JMP debut
+    <B>                          fin:
+fin:                                 JUMPDEST
+    JUMPDEST
+```
+
+Le compilateur produit un texte assembleur (T12), une instruction par ligne et la ligne source en commentaire
+(`; agon:12`), puis l'assemble. La preuve finale : un récolteur écrit en `agon` bat l'agent inerte.
+
+## 4. Ce que nous avons décidé, et pourquoi
+
+*À rédiger.*
+
+## 5. Ce qui nous ferait changer d'avis
+
+Un agent qui a besoin de récursion, ou de plus de 128 variables : on passerait à la pile de cadres simulée, en mesurant
+le surcoût de gaz.
+
+## Historique
+
+- 2026-11-24 — proposée.
