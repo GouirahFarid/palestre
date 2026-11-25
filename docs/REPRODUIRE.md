@@ -113,6 +113,27 @@ chaque instruction :
 Une erreur s'affiche `fichier:ligne : message`, par exemple `add.asm:2 : mnémonique inconnu « FOO »`, avec le code
 de sortie 1. La syntaxe est dans `journal/D-009-syntaxe-assembleur.md`.
 
+### `palestre compile` : le langage `agon`
+
+```bash
+palestre compile agents/harvester.agon -o harvester.pbc
+palestre asm agents/idler.asm -o idler.pbc
+palestre match harvester.pbc idler.pbc --seed 1
+```
+
+```
+tours joués : 100
+agent 0 : (1, 6) énergie 49, porté 8, vivant, 0 faute(s)
+agent 1 : (11, 7) énergie 0, porté 0, mort, 0 faute(s)
+vainqueur : agent 0
+```
+
+C'est le même match que celui du récolteur écrit en assembleur : mêmes décisions, seul le gaz consommé change.
+`--emit-asm` affiche l'assembleur généré, chaque instruction suivie de sa ligne dans le source (`; agon:12`). Une
+erreur s'affiche `fichier:ligne : message`, par exemple `bad.agon:2 : variable inconnue « x »`, avec le code de
+sortie 1. Le langage est décrit dans `journal/D-015-langage-agon.md`, sa compilation dans
+`journal/D-016-generation-agon.md`.
+
 ### `palestre verify` : le vérificateur statique
 
 ```bash
@@ -150,7 +171,7 @@ scriptent : `--sense K=V` (un capteur absent répond `BadSensor`), `--act true|f
 ## Les tests
 
 ```bash
-cargo test --workspace                          # 243 tests, dont 11 propriétés proptest
+cargo test --workspace                          # 270 tests, dont 13 propriétés proptest
 PROPTEST_CASES=5000 cargo test --release        # les propriétés, plus longuement
 ```
 

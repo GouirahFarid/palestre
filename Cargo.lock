@@ -6,7 +6,13 @@ version = 4
 name = "agon"
 version = "0.1.0"
 dependencies = [
+ "arena",
+ "asm",
+ "pbc",
+ "proptest",
  "thiserror",
+ "verify",
+ "vm",
 ]
 
 [[package]]
@@ -338,6 +344,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 name = "palestre"
 version = "0.1.0"
 dependencies = [
+ "agon",
  "arena",
  "asm",
  "clap",

@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use agon::CompileError;
 use arena::{Config, Map};
 use asm::AsmError;
 use clap::{ArgAction, Parser, Subcommand};
@@ -73,6 +74,17 @@ enum Command {
     Disasm {
         /// Fichier `.pbc` à lire.
         input: PathBuf,
+    },
+    /// Compile un source `agon` (D-015, D-016) en `.pbc`.
+    Compile {
+        /// Source `agon`.
+        input: PathBuf,
+        /// Fichier `.pbc` à écrire.
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Affiche aussi le texte assembleur généré, commenté par lignes du source.
+        #[arg(long)]
+        emit_asm: bool,
     },
     /// Vérifie un `.pbc` avant toute exécution (D-014) : sauts, pile et appels, sur tous les chemins.
     Verify {
@@ -142,6 +154,11 @@ fn main() -> ExitCode {
         Command::Corpus { dir, server } => corpus(&dir, server.as_deref()),
         Command::Asm { input, output } => asm(&input, &output),
         Command::Disasm { input } => disasm(&input),
+        Command::Compile {
+            input,
+            output,
+            emit_asm,
+        } => compile(&input, &output, emit_asm),
         Command::Verify { program } => verify_program(&program),
         Command::Run {
             program,
@@ -254,6 +271,38 @@ fn disasm(input: &Path) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(code) => code,
+    }
+}
+
+/// Une erreur s'affiche `fichier:ligne : message`, comme celles de `palestre asm` ; rien n'est écrit.
+fn compile(input: &Path, output: &Path, emit_asm: bool) -> ExitCode {
+    let source = match fs::read_to_string(input) {
+        Ok(source) => source,
+        Err(error) => return fail("compile", input, error),
+    };
+    if emit_asm {
+        match agon::compile_to_asm(&source) {
+            Ok(text) => print!("{text}"),
+            Err(error) => return compile_error(input, &error),
+        }
+    }
+    match agon::compile(&source) {
+        Ok(program) => match fs::write(output, program.to_bytes()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => fail("compile", output, error),
+        },
+        Err(error) => compile_error(input, &error),
+    }
+}
+
+/// La ligne 0 désigne le programme entier : il n'y a pas de ligne à montrer.
+fn compile_error(input: &Path, error: &CompileError) -> ExitCode {
+    match error.line {
+        0 => fail("compile", input, &error.message),
+        line => {
+            eprintln!("{}:{line} : {}", input.display(), error.message);
+            ExitCode::FAILURE
+        }
     }
 }
 

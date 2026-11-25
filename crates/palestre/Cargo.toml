@@ -12,6 +12,7 @@ exec.workspace = true
 pbc.workspace = true
 vm.workspace = true
 verify.workspace = true
+agon.workspace = true
 serde_json.workspace = true
 clap.workspace = true
 
